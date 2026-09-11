@@ -1,0 +1,24 @@
+{
+  "name": "genius-pos-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "node check-components.mjs"
+  },
+  "dependencies": {
+    "genius-pos": "file:..",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "acorn": "^8.12.1",
+    "acorn-jsx": "^5.3.2",
+    "acorn-walk": "^8.3.4",
+    "vite": "^5.4.2"
+  }
+}

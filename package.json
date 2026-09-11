@@ -1,0 +1,43 @@
+{
+  "name": "genius-pos",
+  "version": "1.47.0",
+  "description": "Genius POS \u2014 till, stock and double-entry books for Ugandan shops",
+  "scripts": {
+    "install:all": "cd frontend && npm install && cd ../backend && npm install",
+    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install",
+    "start": "cd backend && node server.js",
+    "seed": "cd backend && node seed.js",
+    "dev:api": "cd backend && node server.js",
+    "dev:web": "cd frontend && npm run dev",
+    "test": "cd backend && npm test",
+    "test:e2e": "node e2e/run.mjs",
+    "test:all": "npm test && npm run test:e2e",
+    "split": "cd backend && node database/split.js",
+    "audit:visual": "node e2e/visual.audit.mjs",
+    "audit:layout": "node e2e/layout.check.mjs",
+    "audit:css": "node e2e/deadcss.mjs",
+    "desktop": "electron electron/main.js",
+    "dist:win": "npm run build && electron-builder --win nsis portable --x64",
+    "dist:dir": "npm run build && electron-builder --dir",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease"
+  },
+  "main": "electron/main.js",
+  "author": "SALJO TECH",
+  "devDependencies": {
+    "playwright": "^1.55.0",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "@capacitor/cli": "^6.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/android": "^6.1.2"
+  }
+}

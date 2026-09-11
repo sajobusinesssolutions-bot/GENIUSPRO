@@ -1,0 +1,16 @@
+node_modules/
+frontend/dist/
+backend/data/
+*.db
+*.db-journal
+.env
+.DS_Store
+
+# Editor / review backups — the git history is the record now.
+*.bak
+
+# End-to-end suite temp artifacts
+e2e/screenshots/
+
+# Session zips are built from the tree, not stored in it.
+*.zip

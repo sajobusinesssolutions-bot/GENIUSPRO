@@ -1,0 +1,64 @@
+# Render blueprint — the server the phone and the till both talk to.
+#
+# ── what this deploys, and what it does not ──────────────────────────────────
+#
+# This is the *server*: the Node application in `backend/`, which holds every
+# business rule and is the only thing that talks to the database. It is not the
+# database. Those are two different services and both are needed:
+#
+#     Android app  ─┐
+#                   ├─►  this Render service  ─►  Turso (the books)
+#     desktop till ─┘
+#
+# The Turso address and token are set HERE, on the server, and nowhere else.
+# They are read-write keys to every shop's books, and anything the phone app
+# holds can be read by anyone who downloads the app — an APK is a zip file and
+# its strings are one command away. That is the whole reason the phone talks to
+# a server rather than to the database directly.
+#
+# ── no persistent disk any more ──────────────────────────────────────────────
+#
+# The previous version of this file mounted a 1 GB disk and kept a SQLite file
+# on it. That works for one server and cannot work for two devices at once,
+# which is the point of the exercise. With the books hosted there is no file to
+# persist, so the disk is gone.
+services:
+  - type: web
+    name: genius-pos
+    runtime: node
+    plan: starter
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── the books ──────────────────────────────────────────────────────────
+      # Both must be set, or the app refuses to start rather than quietly
+      # falling back to a file that would vanish on the next deploy.
+      - key: GENIUS_DB_URL
+        sync: false          # e.g. libsql://yourshop-org.turso.io
+      - key: GENIUS_DB_TOKEN
+        sync: false          # the Turso access token — a secret, never committed
+
+      # ── sign-in ────────────────────────────────────────────────────────────
+      # Generated once by Render. If you ever run a SECOND server against the
+      # same database, both must carry the SAME value: sign-in tokens are
+      # signed with it, and a person signed in on one would be a stranger to
+      # the other otherwise.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # ── email ──────────────────────────────────────────────────────────────
+      # Sign-in codes, sign-up codes and invitations go out through this. Left
+      # as `console` the codes are only written to the log, which is fine while
+      # testing and useless to a shopkeeper — set a real provider before anyone
+      # relies on it, and send from a domain you control with SPF and DKIM
+      # published, or the codes land in spam and the product looks broken.
+      - key: EMAIL_PROVIDER
+        value: console
+      - key: EMAIL_FROM
+        sync: false          # "Genius POS <no-reply@yourdomain.co.ug>"
+      - key: APP_URL
+        sync: false          # this service's own address, for invitation links

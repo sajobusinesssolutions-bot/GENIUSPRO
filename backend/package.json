@@ -1,0 +1,23 @@
+{
+  "name": "genius-pos-backend",
+  "version": "1.21.0",
+  "description": "GST billing, inventory & accounting — deployable MVP on the SACCO blueprint",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "test": "node test/run.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "genius-pos": "file:..",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "sql.js": "^1.12.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "appId": "ug.co.saljotech.geniuspos",
+  "appName": "Genius POS",
+  "webDir": "frontend/dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

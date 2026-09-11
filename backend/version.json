@@ -1,0 +1,13 @@
+{
+  "version": "1.47.0",
+  "released": "2026-09-09",
+  "notes": [
+    "The interface can now be built as an Android app: npm run android:apk, once npx cap add android has been run.",
+    "The app asks once for the shop's server address, checks it really answers, and remembers it.",
+    "The database address and token stay on the server and never travel inside the app \u2014 an APK is a zip file anyone can read.",
+    "render.yaml now deploys against the hosted database instead of a disk, because a file on one server cannot be shared with a phone.",
+    "Existing browser and desktop installations are unchanged: with no address configured the app talks to its own origin exactly as before.",
+    "The phone is a device the account has not used, so the first sign-in on it asks for the emailed code \u2014 then remembers it for 30 days.",
+    "No offline support on the phone. No signal means no sales, the same as the hosted desktop."
+  ]
+}

@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A complete system reference for Genius POS — layers, modules, data model, screens, workflows, design system, and the sixteen rounds of correction behind them.">
+<meta name="author" content="SALJO TECH">
+<title>Genius POS Anatomy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+
+<style>
+  /* ── tokens ──────────────────────────────────────────────────────────
+     Light is the complete set. Dark redefines only these, twice: once for
+     the OS preference (guarded so an explicit light choice wins) and once
+     for the explicit dark stamp. No colour is ever declared inside those
+     blocks — only tokens. */
+  :root {
+    --ground: #F6F6FA;
+    --surface: #FFFFFF;
+    --sunk: #EFEFF5;
+    --line: #E1E1EC;
+    --line-soft: #EDEDF4;
+    --ink: #17181F;
+    --soft: #4A4B5C;
+    --faint: #74758A;
+    --accent: #3730A3;
+    --accent-soft: #ECECFB;
+    --good: #0E7A57;
+    --warn: #9A5B0B;
+    --danger: #B3261E;
+    --shadow: 0 1px 2px rgba(23,24,31,.05), 0 8px 24px -16px rgba(23,24,31,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #131319;
+      --surface: #1B1B23;
+      --sunk: #22222C;
+      --line: #2E2E3A;
+      --line-soft: #262631;
+      --ink: #E9E9F1;
+      --soft: #B4B5C6;
+      --faint: #8B8C9F;
+      --accent: #A5A0FF;
+      --accent-soft: #23223A;
+      --good: #4FC49A;
+      --warn: #E0A24A;
+      --danger: #F2837A;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #131319;
+    --surface: #1B1B23;
+    --sunk: #22222C;
+    --line: #2E2E3A;
+    --line-soft: #262631;
+    --ink: #E9E9F1;
+    --soft: #B4B5C6;
+    --faint: #8B8C9F;
+    --accent: #A5A0FF;
+    --accent-soft: #23223A;
+    --good: #4FC49A;
+    --warn: #E0A24A;
+    --danger: #F2837A;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    max-width: 1340px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+  @media (min-width: 1080px) {
+    .wrap { grid-template-columns: 210px minmax(0, 1fr); gap: 0 56px; padding: 0 40px 120px; }
+    header.mast { grid-column: 1 / -1; }
+  }
+
+  /* ── contents rail ─────────────────────────────────────────────── */
+  nav.toc { display: none; }
+  @media (min-width: 1080px) {
+    nav.toc {
+      display: block;
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+      padding: 40px 0 40px;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+    nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+    nav.toc a {
+      color: var(--faint); text-decoration: none;
+      display: grid; grid-template-columns: 22px 1fr; gap: 6px;
+      padding: 2px 0;
+      border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px;
+    }
+    nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+    nav.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+    nav.toc .n { color: var(--accent); }
+    nav.toc .lab { font-family: "IBM Plex Sans", sans-serif; font-size: 12.5px; letter-spacing: .01em; }
+  }
+
+  main { min-width: 0; }
+
+  /* ── masthead ──────────────────────────────────────────────────── */
+  header.mast { padding: 80px 0 44px; border-bottom: 1px solid var(--line); }
+  .kicker {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 20px;
+  }
+  h1 {
+    font-family: Newsreader, ui-serif, Georgia, serif;
+    font-weight: 500;
+    font-size: clamp(40px, 6.4vw, 66px);
+    line-height: 1.04;
+    letter-spacing: -.02em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+    max-width: 16ch;
+  }
+  .standfirst {
+    font-family: Newsreader, serif;
+    font-size: clamp(18px, 2.2vw, 21px);
+    line-height: 1.55;
+    color: var(--soft);
+    margin: 0;
+    max-width: 62ch;
+  }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 20px;
+    margin-top: 30px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; color: var(--faint);
+  }
+  .mast-meta b { color: var(--ink); font-weight: 500; }
+
+  /* ── sections ──────────────────────────────────────────────────── */
+  section { padding: 60px 0 4px; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: none; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint);
+    display: flex; align-items: baseline; gap: 12px;
+    margin: 0 0 14px;
+  }
+  .eyebrow .n { color: var(--accent); }
+  h2 {
+    font-family: Newsreader, serif;
+    font-weight: 500;
+    font-size: clamp(27px, 3.4vw, 36px);
+    line-height: 1.12;
+    letter-spacing: -.015em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+    max-width: 22ch;
+  }
+  h3 {
+    font-size: 15px; font-weight: 600; letter-spacing: -.005em;
+    margin: 34px 0 10px;
+  }
+  h4 {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); margin: 26px 0 8px;
+  }
+  p { margin: 0 0 16px; max-width: 68ch; color: var(--soft); }
+  p strong, li strong { color: var(--ink); font-weight: 600; }
+  section > p:first-of-type { color: var(--ink); }
+  a { color: var(--accent); }
+  ul, ol { max-width: 68ch; color: var(--soft); padding-left: 20px; margin: 0 0 16px; }
+  li { margin-bottom: 7px; }
+  code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .87em;
+    background: var(--sunk);
+    padding: .1em .38em;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  .lede { font-size: 17.5px; color: var(--ink); max-width: 64ch; }
+
+  /* ── stat band ─────────────────────────────────────────────────── */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line);
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    margin: 26px 0 8px;
+  }
+  .stat { background: var(--surface); padding: 16px 18px; }
+  .stat .v {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 25px; font-weight: 500; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink); display: block; line-height: 1.2;
+  }
+  .stat .k {
+    font-size: 12px; color: var(--faint); margin-top: 3px; display: block;
+  }
+
+  /* ── cards / tables ────────────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px 24px;
+    margin: 22px 0;
+    box-shadow: var(--shadow);
+  }
+  .panel > :last-child { margin-bottom: 0; }
+  .panel-title {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); margin: 0 0 14px;
+  }
+
+  .scroll { overflow-x: auto; margin: 22px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th {
+    text-align: left; font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500;
+    padding: 11px 16px; border-bottom: 1px solid var(--line); white-space: nowrap;
+    background: var(--sunk);
+  }
+  td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); color: var(--soft); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td b, td strong { color: var(--ink); font-weight: 600; }
+  td.num, th.num { text-align: right; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td .mono, .mono { font-family: "IBM Plex Mono", monospace; font-size: .92em; }
+
+  /* ── layer stack ───────────────────────────────────────────────── */
+  .stack { display: flex; flex-direction: column; gap: 8px; margin: 24px 0; }
+  .layer {
+    display: grid; grid-template-columns: 128px minmax(0,1fr);
+    gap: 18px; align-items: start;
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 14px 18px;
+  }
+  .layer .nm { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink); font-weight: 500; }
+  .layer .nm small { display: block; color: var(--faint); font-weight: 400; margin-top: 2px; letter-spacing: 0; }
+  .layer .d { font-size: 14px; color: var(--soft); }
+  @media (max-width: 620px) { .layer { grid-template-columns: 1fr; gap: 6px; } }
+
+  /* ── module grid ───────────────────────────────────────────────── */
+  .mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 22px 0; }
+  .mod { background: var(--surface); padding: 14px 16px; }
+  .mod .t { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink); font-weight: 500; }
+  .mod .d { font-size: 13px; color: var(--faint); margin-top: 4px; line-height: 1.5; }
+
+  /* ── flow ──────────────────────────────────────────────────────── */
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 22px 0; }
+  .step { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 16px; }
+  .step .marker { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .step .dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    margin-top: 7px; flex: none;
+  }
+  .step .rule { width: 1px; flex: 1; background: var(--line); min-height: 12px; }
+  .step:last-child .rule { display: none; }
+  .step .body { padding-bottom: 20px; }
+  .step .t { font-weight: 600; font-size: 14.5px; color: var(--ink); }
+  .step .d { font-size: 14px; color: var(--soft); margin-top: 3px; }
+  .step .d code { font-size: 12.5px; }
+
+  /* ── timeline ──────────────────────────────────────────────────── */
+  .tl { display: flex; flex-direction: column; gap: 0; margin: 24px 0; }
+  .ev {
+    display: grid; grid-template-columns: 78px minmax(0,1fr);
+    gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--line-soft);
+  }
+  .ev:last-child { border-bottom: none; }
+  .ev .when {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+    color: var(--accent); padding-top: 3px; letter-spacing: .02em;
+  }
+  .ev .t { font-weight: 600; font-size: 14.5px; color: var(--ink); }
+  .ev .d { font-size: 14px; color: var(--soft); margin-top: 2px; }
+  @media (max-width: 620px) { .ev { grid-template-columns: 1fr; gap: 2px; } }
+
+  /* ── pull quote ────────────────────────────────────────────────── */
+  .pull {
+    border-left: 2px solid var(--accent);
+    padding: 4px 0 4px 22px;
+    margin: 26px 0;
+    font-family: Newsreader, serif;
+    font-size: 20px; line-height: 1.5; color: var(--ink);
+    max-width: 56ch;
+  }
+  .pull cite { display: block; font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+    font-style: normal; color: var(--faint); margin-top: 10px; letter-spacing: .06em; text-transform: uppercase; }
+
+  /* ── chips & semantic marks ────────────────────────────────────── */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--sunk); color: var(--soft); white-space: nowrap;
+  }
+  .chip.good { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
+  .chip.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+  .chip.bad  { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+  .chip.acc  { color: var(--accent); background: var(--accent-soft); }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+  .sw { display: flex; align-items: center; gap: 8px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--soft); }
+  .sw i { width: 22px; height: 22px; border-radius: 5px; display: block; border: 1px solid var(--line); }
+
+  .cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 34px; }
+  .cols2 > div > p:last-child { margin-bottom: 8px; }
+
+  footer.end {
+    padding: 54px 0 0; margin-top: 40px; border-top: 1px solid var(--line);
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--faint);
+    display: flex; flex-wrap: wrap; gap: 6px 22px;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<style>
+  /* ── on paper ────────────────────────────────────────────────────────
+     The screen version is a two-column reference with a sticky contents
+     rail. Paper has no viewport to be sticky inside and no dark mode, so
+     three things change and nothing else: the palette is pinned to the
+     light set, the rail becomes a contents page, and anything that would
+     read badly split in half is kept whole. */
+  @page {
+    size: A4;
+    margin: 17mm 16mm 18mm;
+  }
+
+  @media print {
+    /* Pinned, not inherited: a laptop set to dark mode would otherwise
+       print pale grey text onto white paper. */
+    :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+      --ground: #FFFFFF;
+      --surface: #FFFFFF;
+      --sunk: #F3F3F8;
+      --line: #D5D5E2;
+      --line-soft: #E7E7F0;
+      --ink: #14151C;
+      --soft: #3D3E4E;
+      --faint: #6A6B7E;
+      --accent: #3730A3;
+      --accent-soft: #EEEEFC;
+      --good: #0E7A57;
+      --warn: #8A5209;
+      --danger: #A81F18;
+      --shadow: none;
+    }
+
+    body { font-size: 10pt; line-height: 1.5; }
+    .wrap { display: block; max-width: none; padding: 0; }
+    main { max-width: none; }
+
+    /* The contents rail becomes a contents list at the front. */
+    nav.toc {
+      display: block; position: static; max-height: none; overflow: visible;
+      padding: 0 0 20px; margin: 0 0 4px;
+      border-bottom: 1px solid var(--line);
+      break-after: page;
+    }
+    nav.toc::before {
+      content: "Contents";
+      display: block;
+      font-family: Newsreader, serif; font-size: 20pt; font-weight: 500;
+      letter-spacing: -.015em; color: var(--ink); margin: 0 0 14px;
+    }
+    /* The screen's list reset lives inside a min-width query that paper is
+       narrower than, so it has to be restated here or the contents page
+       comes out double-numbered: "1. 01 The concept". */
+    nav.toc ol { columns: 2; column-gap: 28px; display: block; list-style: none; margin: 0; padding: 0; }
+    nav.toc a { display: block; break-inside: avoid; color: var(--soft); border: none; margin: 0; padding: 3px 0; }
+    nav.toc .n { color: var(--accent); margin-right: 8px; }
+    nav.toc .lab { font-size: 10pt; }
+
+    /* Page one is the title page; contents follows on its own. */
+    header.mast { padding: 0 0 26px; break-after: page; border-bottom: none; }
+    h1 { font-size: 34pt; max-width: 18ch; }
+    .standfirst { font-size: 12pt; }
+
+    section { padding: 26px 0 2px; break-before: auto; }
+    h2 { font-size: 19pt; break-after: avoid; }
+    h3, h4, .eyebrow, .panel-title { break-after: avoid; }
+    /* A heading must not break across a page turn: page four opened with
+       "actually weighs" and nothing else. Avoiding the break AFTER a heading
+       keeps it with its content; avoiding the break INSIDE keeps it with
+       itself. Both are needed. */
+    h1, h2, h3, h4, .eyebrow, .lede { break-inside: avoid; }
+    p, li { orphans: 3; widows: 3; }
+
+    /* Kept whole: a statistic split down the middle is unreadable, and a
+       table row broken across a page turn is worse than a short page. */
+    .panel, .stat, .layer, .ev, .step, .mod, .pull, .swatches, tr, thead { break-inside: avoid; }
+    .scroll { overflow: visible; break-inside: auto; }
+    table { font-size: 9pt; }
+    th, td { padding: 7px 10px; }
+    .stats { break-inside: avoid; }
+
+    a { color: var(--accent); text-decoration: none; }
+    footer.end { break-inside: avoid; }
+  }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+    <header class="mast">
+    <p class="kicker">Genius POS · v1.42 · system reference</p>
+    <h1>Everything the shop did today, already added up.</h1>
+    <p class="standfirst">
+      A billing, stock and double-entry accounting application for Ugandan shops — a till that
+      works at counter speed, books that balance without anybody keeping them, and a printed
+      receipt at the end of it. This is what is inside: the layers, the modules, the data, the
+      screens, the design system, and the sixteen rounds of correction that made each of them
+      what they are.
+    </p>
+    <div class="mast-meta">
+      <span><b>48,754</b> lines of application code</span>
+      <span><b>29</b> backend modules</span>
+      <span><b>325</b> endpoints</span>
+      <span><b>73</b> tables</span>
+      <span><b>31</b> screens</span>
+      <span><b>58</b> reports</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#concept"><span class="n">01</span><span class="lab">The concept</span></a></li>
+      <li><a href="#shape"><span class="n">02</span><span class="lab">Shape &amp; scale</span></a></li>
+      <li><a href="#layers"><span class="n">03</span><span class="lab">The layers</span></a></li>
+      <li><a href="#storage"><span class="n">04</span><span class="lab">Storage</span></a></li>
+      <li><a href="#tenancy"><span class="n">05</span><span class="lab">Companies</span></a></li>
+      <li><a href="#identity"><span class="n">06</span><span class="lab">Identity</span></a></li>
+      <li><a href="#modules"><span class="n">07</span><span class="lab">Modules</span></a></li>
+      <li><a href="#data"><span class="n">08</span><span class="lab">The data model</span></a></li>
+      <li><a href="#money"><span class="n">09</span><span class="lab">Money &amp; tax</span></a></li>
+      <li><a href="#screens"><span class="n">10</span><span class="lab">Screens</span></a></li>
+      <li><a href="#workflows"><span class="n">11</span><span class="lab">Workflows</span></a></li>
+      <li><a href="#design"><span class="n">12</span><span class="lab">The design system</span></a></li>
+      <li><a href="#print"><span class="n">13</span><span class="lab">Paper</span></a></li>
+      <li><a href="#testing"><span class="n">14</span><span class="lab">Verification</span></a></li>
+      <li><a href="#history"><span class="n">15</span><span class="lab">How it got here</span></a></li>
+      <li><a href="#gaps"><span class="n">16</span><span class="lab">Known gaps</span></a></li>
+      <li><a href="#running"><span class="n">17</span><span class="lab">Running it</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- 01 ───────────────────────────────────────────────────────── -->
+    <section id="concept">
+      <p class="eyebrow"><span class="n">01</span> The concept</p>
+      <h2>One book, kept by the act of selling</h2>
+      <p class="lede">
+        The premise is that a shopkeeper should never keep books. They should sell, buy, and take
+        money — and the books should be a by-product of having done so, complete enough to file tax
+        from and to argue with a supplier over.
+      </p>
+      <p>
+        Every till sale posts, in one transaction: the invoice and its lines, the stock movement out
+        of the right batch, the journal entries that debit cash and credit sales and move cost of
+        goods, and the party balance if it was on credit. There is no “post to accounts” step,
+        because a step somebody can forget is a set of books that is wrong by the amount they forgot.
+      </p>
+      <p>
+        Three commitments shape almost every decision below.
+      </p>
+      <ul>
+        <li><strong>It keeps working when the network does not.</strong> The desktop build is the
+          whole application — server, database and interface — on one machine. Nothing about a sale
+          requires a connection.</li>
+        <li><strong>Saved means on the platter.</strong> A write the till has been told succeeded is
+          on disk before the reply leaves the socket, not queued behind an event loop turn.</li>
+        <li><strong>Nothing silent.</strong> A figure that could not be read shows as unavailable,
+          never as <code>Sh 0</code>. A backup that cannot be re-opened is deleted rather than left
+          in the list looking usable.</li>
+      </ul>
+      <div class="pull">
+        A stale figure and a suppressed one are different, and only one of them is honest.
+        <cite>The rule that survived every round</cite>
+      </div>
+    </section>
+
+    <!-- 02 ───────────────────────────────────────────────────────── -->
+    <section id="shape">
+      <p class="eyebrow"><span class="n">02</span> Shape &amp; scale</p>
+      <h2>What the thing actually weighs</h2>
+      <div class="stats">
+        <div class="stat"><span class="v">22,021</span><span class="k">lines of backend JavaScript</span></div>
+        <div class="stat"><span class="v">26,733</span><span class="k">lines of React</span></div>
+        <div class="stat"><span class="v">6,706</span><span class="k">lines of CSS</span></div>
+        <div class="stat"><span class="v">325</span><span class="k">HTTP endpoints</span></div>
+        <div class="stat"><span class="v">73</span><span class="k">database tables</span></div>
+        <div class="stat"><span class="v">124</span><span class="k">settings</span></div>
+        <div class="stat"><span class="v">51</span><span class="k">permission questions</span></div>
+        <div class="stat"><span class="v">58</span><span class="k">reports</span></div>
+      </div>
+      <p style="margin-top:22px">
+        The endpoint mix is telling: <strong>192 reads to 133 writes</strong>. This is an
+        application that is looked at far more than it is typed into — which is why the reports,
+        the dashboard and the panels get as much attention as the till.
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Piece</th><th>What it is</th><th class="num">Size</th></tr></thead>
+          <tbody>
+            <tr><td><b>backend/</b></td><td>Express, 29 modules, 39 route files, 5 services, shared engines</td><td class="num">22,021</td></tr>
+            <tr><td><b>frontend/src/</b></td><td>React 18 + Vite, 31 pages, 18 shared library modules</td><td class="num">26,733</td></tr>
+            <tr><td><b>deck.css</b></td><td>the live design layer — tokens, components, the type and spacing scales</td><td class="num">4,908</td></tr>
+            <tr><td><b>styles.css</b></td><td>the original layer: reset and base rules, 148 live selectors</td><td class="num">1,798</td></tr>
+            <tr><td><b>electron/</b></td><td>desktop shell — the same server, the same bundle, one window</td><td class="num">2 files</td></tr>
+            <tr><td><b>test/ + e2e/</b></td><td>8 unit suites, 4 API suites, 20 browser specs, 5 audits</td><td class="num">37 files</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 03 ───────────────────────────────────────────────────────── -->
+    <section id="layers">
+      <p class="eyebrow"><span class="n">03</span> The layers</p>
+      <h2>What a request passes through</h2>
+      <p>
+        No framework magic and no ORM. A request crosses six layers, each of which can be read in
+        one sitting, and every one of them has a rule it exists to hold.
+      </p>
+      <div class="stack">
+        <div class="layer">
+          <div class="nm">express<small>server.js</small></div>
+          <div class="d">Helmet, compression, CORS, request logging, a 50&nbsp;MB JSON limit, and one
+            envelope for every reply — <code>res.success(data, message)</code> /
+            <code>res.fail(message, status)</code>. The client never has to guess the shape.</div>
+        </div>
+        <div class="layer">
+          <div class="nm">auth<small>middleware/auth.js</small></div>
+          <div class="d">Verifies the token, then <em>asks the database whether it still means
+            anything</em>: the session is not revoked, the company is not suspended, the membership
+            still stands. Each failure names which. Then it puts the company into storage context.</div>
+        </div>
+        <div class="layer">
+          <div class="nm">routes<small>modules/*/…routes.js</small></div>
+          <div class="d">One file per domain concern. Permission is checked per route against the
+            role's granted pairs; validation refuses in the shopkeeper's language, not the schema's.</div>
+        </div>
+        <div class="layer">
+          <div class="nm">durable<small>shared/durable.js</small></div>
+          <div class="d">The transaction idiom, written once: acquire, begin, work, commit, reply.
+            The handler returns a <em>function</em> that sends the response — so the client is never
+            told “saved” before the bytes are on the platter. Return anything else and it rolls back.</div>
+        </div>
+        <div class="layer">
+          <div class="nm">engines<small>shared/*.js</small></div>
+          <div class="d">The parts with opinions: the tax chain, the double-entry poster, the stock
+            poster with earliest-expiry-first consumption, unit conversion, sequences, the
+            provisioner that builds a whole company.</div>
+        </div>
+        <div class="layer">
+          <div class="nm">storage<small>database/db.js</small></div>
+          <div class="d">sql.js — SQLite compiled to WebAssembly. One store per database file, each
+            with its own handle, write mutex, transaction depth and atomic save.</div>
+        </div>
+      </div>
+      <h3>Why sql.js and not a native driver</h3>
+      <p>
+        No native compilation means the same artifact runs in Electron on a shop's laptop, on a
+        Linux host, and in a restricted CI sandbox — no build toolchain at the counter. The cost is
+        that the whole database lives in a 2&nbsp;GB WebAssembly heap and every committed write
+        exports the entire file. Both consequences are measured rather than assumed; see
+        <a href="#storage">Storage</a>.
+      </p>
+    </section>
+
+    <!-- 04 ───────────────────────────────────────────────────────── -->
+    <section id="storage">
+      <p class="eyebrow"><span class="n">04</span> Storage</p>
+      <h2>A ceiling that is known, and said out loud</h2>
+      <p>
+        The storage layer is the most carefully argued file in the application, because it is the
+        one where being wrong loses a sale that has already been rung up.
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Invoices</th><th class="num">Rows</th><th class="num">File</th><th class="num">Opens in</th><th class="num">Worst endpoint</th></tr></thead>
+          <tbody>
+            <tr><td>20,000</td><td class="num">380k</td><td class="num">31.8 MB</td><td class="num">0.6 s</td><td class="num">1.3 s</td></tr>
+            <tr><td>100,000</td><td class="num">1.9M</td><td class="num">169 MB</td><td class="num">1.9 s</td><td class="num">2.2 s</td></tr>
+            <tr><td>300,000</td><td class="num">5.6M</td><td class="num">486 MB</td><td class="num">12 s</td><td class="num">5.7 s</td></tr>
+            <tr><td>500,000</td><td class="num">9.3M</td><td class="num">989 MB</td><td class="num">20 s</td><td class="num">11 s</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        In trading terms 500,000 invoices is about <strong>45 years at 30 sales a day</strong>. The
+        application warns at 600&nbsp;MB — roughly 27 years — because “archive the oldest years” should
+        be a calm decision, not an emergency. Past about a gigabyte the open fails with a
+        WebAssembly trap that tells a shopkeeper nothing, so the layer catches it and says what it
+        actually means.
+      </p>
+      <h4>The four properties that took thirteen rounds to get right</h4>
+      <ul>
+        <li><strong>Atomic save.</strong> Write a temp file, <code>fsync</code>, rename. A power cut
+          can lose the last write; it cannot corrupt the file.</li>
+        <li><strong>Flush at the end of the turn, commit synchronously.</strong> An ordinary write is
+          saved one event-loop turn later; a transaction saves before <code>commit()</code> returns.
+          The earlier 200&nbsp;ms debounce lost an acknowledged held bill to a <code>SIGKILL</code>
+          100&nbsp;ms later — measured, not theorised.</li>
+        <li><strong>Never export inside a transaction.</strong> <code>export()</code> closes the
+          handle, which discards the open transaction. The save defers instead.</li>
+        <li><strong>One writer per file.</strong> A mutex with a 30-second watchdog that complains
+          loudly and takes the lock back, because a handler that never releases would wedge every
+          till in the shop.</li>
+      </ul>
+      <div class="panel">
+        <p class="panel-title">A bug worth remembering</p>
+        <p style="margin-bottom:0">
+          <code>Database.exec()</code> in sql.js leaks 16 bytes of WebAssembly stack per call and
+          never restores the pointer. The old <code>query()</code> used it after every write to read
+          the last insert id — so the process had a hard budget of about <strong>328,000
+          writes</strong> and then died with a memory trap, whatever the database contained. That was
+          the ceiling the scale work kept hitting, and it was never a data-volume limit.
+          <code>prepare()/step()/free()</code> has no such leak, verified to a million calls.
+        </p>
+      </div>
+    </section>
+
+    <!-- 05 ───────────────────────────────────────────────────────── -->
+    <section id="tenancy">
+      <p class="eyebrow"><span class="n">05</span> Companies</p>
+      <h2>One installation, many businesses</h2>
+      <p>
+        <code>firms</code> is the tenant boundary, and <code>firm_id</code> is threaded through 58
+        tables. A shopkeeper with a hardware shop and a bar runs both from one account, switches
+        between them, and never sees one from inside the other.
+      </p>
+      <h3>Two storage arrangements, one application</h3>
+      <p>
+        The desktop build keeps everything in one file. Hosting cannot: sharing a file between shops
+        makes every shop's sale export every other shop's data, turns a 45-year ceiling into about
+        three months across two hundred shops, and makes one shop's till queue behind another's. So
+        <code>SPLIT_STORAGE=1</code> gives each company its own SQLite file with a small central one
+        for identity.
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Lives in the company's file</th><th>Lives in the central file</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Documents, stock, parties, the ledger, settings, roles and permissions, invoice
+                numbering, the audit log — and <b>counter staff</b>, who belong to the shop they work in</td>
+              <td>The list of companies, accounts, memberships, invitations, sessions, verification
+                codes, the sign-in throttle, the outbox</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Which side <code>users</code> falls on was the decision the whole split turned on. A scan of
+        every SQL statement in the codebase found <strong>36 that straddled the boundary — and 33 of
+        them were the same shape</strong>: a company's rows joined to <code>users</code> to print who
+        did it. Cashier on a receipt, who held a bill, who voided a line, the whole sales-rep half of
+        Reports. Moving one table moved all of them at once, and took the count to zero.
+      </p>
+      <p>
+        A statement that names tables from both sides now <strong>throws by name</strong>. It has to:
+        a <code>LEFT JOIN</code> across the boundary does not error, it returns the other side blank,
+        and the screen renders a missing cashier as “Unknown” rather than as broken. A test walks
+        every SQL literal in the tree and fails the build on a new one.
+      </p>
+      <p>
+        There is no distributed commit and none is invented. A write to the other database from
+        inside an open transaction is refused, and the few operations that genuinely touch both —
+        creating a company, accepting an invitation, restoring — order their writes so a crash
+        between them leaves something repairable rather than something quietly wrong.
+      </p>
+      <h3>Backup, per company</h3>
+      <p>
+        A company exports as a real SQLite file carrying <strong>control totals</strong> — invoice
+        count and value, purchases, parties, items, both ledger columns, stock valuation. The restore
+        recomputes them inside the transaction and <strong>rolls back on any mismatch</strong>, naming
+        which figure was wrong. Restoring in place needs no renumbering: ids are
+        <code>AUTOINCREMENT</code> and unique across the file, so deleting a company's rows and
+        reinserting them with their original ids leaves every foreign reference valid.
+      </p>
+    </section>
+
+    <!-- 06 ───────────────────────────────────────────────────────── -->
+    <section id="identity">
+      <p class="eyebrow"><span class="n">06</span> Identity</p>
+      <h2>The owner has an email. The cashier does not.</h2>
+      <p>
+        Requiring an address per counter staff member means the owner invents
+        <code>shop1cashier2@gmail.com</code>, or — worse and commonly — shares one login between two
+        counters, which corrupts held bills. So there are two tiers.
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Tier</th><th>Who</th><th>Signs in with</th><th>Scope</th></tr></thead>
+          <tbody>
+            <tr><td><b>Account</b></td><td>Owner, admin, accountant</td><td>Email + password, verified by a six-digit code</td><td>Global — one account, many companies</td></tr>
+            <tr><td><b>Staff</b></td><td>Cashier, storekeeper</td><td>Username + password, or a 4-digit PIN</td><td>One company, named by its <b>shop code</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The shop code (<code>kampala-hardware</code>) is how a cashier says which shop before typing
+        a username — because on a hosted server two shops may each employ a James. It is the name of
+        the door, not the key: the sign-in screen may say a code was not recognised, but the route
+        that accepts a password answers <em>“Wrong username or password”</em> whether the shop, the
+        user or the password was wrong. A single-shop installation is never asked.
+      </p>
+      <h4>Permissions</h4>
+      <p>
+        Roles are per company and hold module/action pairs. The catalogue phrases all
+        <strong>51</strong> of them as plain questions — “Give somebody access”, “See the
+        all-businesses panel” — because an administrator ticking boxes should be answering questions
+        about their shop, not reading an access-control matrix. A company's <strong>owner</strong> is
+        not a role and cannot be edited out of their own books.
+      </p>
+      <h4>Onboarding</h4>
+      <p>
+        Sign up → a six-digit code (not a link: on Android the email frequently opens on a laptop) →
+        the first business → invite staff. Sign-up answers identically whether the address is new or
+        known, so it cannot be used to test which shopkeepers use the product; the person who holds
+        the address is told by email that somebody tried. Invitations are 32 random bytes stored as a
+        SHA-256 digest, single-use, seven days, withdrawable.
+      </p>
+    </section>
+
+    <!-- 07 ───────────────────────────────────────────────────────── -->
+    <section id="modules">
+      <p class="eyebrow"><span class="n">07</span> Modules</p>
+      <h2>Twenty-nine domains, one file each</h2>
+      <div class="mods">
+        <div class="mod"><div class="t">sales</div><div class="d">Invoices, credit and cash, sales reps, idempotent posting</div></div>
+        <div class="mod"><div class="t">pos</div><div class="d">The till: keyboard billing, held bills, per-counter claims, day close</div></div>
+        <div class="mod"><div class="t">purchases</div><div class="d">Supplier bills, purchase orders, landed extra costs, batches</div></div>
+        <div class="mod"><div class="t">returns</div><div class="d">Credit notes, debit notes, delivery challans</div></div>
+        <div class="mod"><div class="t">estimates</div><div class="d">Quotations and sale orders, converted in one step</div></div>
+        <div class="mod"><div class="t">items</div><div class="d">Products, services, units, categories, barcodes, serials, repacks</div></div>
+        <div class="mod"><div class="t">parties</div><div class="d">Customers and suppliers, groups, per-party rates, statements</div></div>
+        <div class="mod"><div class="t">payments</div><div class="d">Receipts and payments, allocation against documents</div></div>
+        <div class="mod"><div class="t">money</div><div class="d">Cash and bank, movements, transfers, other income</div></div>
+        <div class="mod"><div class="t">expenses</div><div class="d">Categorised spending, straight into the ledger</div></div>
+        <div class="mod"><div class="t">accounting</div><div class="d">Chart of accounts, journals, trial balance, P&amp;L, balance sheet, integrity</div></div>
+        <div class="mod"><div class="t">tax</div><div class="d">VAT, withholding, EFRIS register, filing history, a pre-filing checklist</div></div>
+        <div class="mod"><div class="t">reports</div><div class="d">58 reports in 7 groups, each printable</div></div>
+        <div class="mod"><div class="t">dashboard</div><div class="d">Today, collection health, ageing, what needs attention</div></div>
+        <div class="mod"><div class="t">companies</div><div class="d">Create, switch, suspend, delete; people, invitations, the all-businesses panel</div></div>
+        <div class="mod"><div class="t">auth</div><div class="d">Three sign-in paths, sessions, refresh, shop resolution</div></div>
+        <div class="mod"><div class="t">users</div><div class="d">Staff logins, roles, permission grants</div></div>
+        <div class="mod"><div class="t">staff</div><div class="d">Who is on, what they sold, what they are owed</div></div>
+        <div class="mod"><div class="t">shifts</div><div class="d">Open and close the till, reconcile the drawer</div></div>
+        <div class="mod"><div class="t">stocktake</div><div class="d">Count the shelf, post the variance</div></div>
+        <div class="mod"><div class="t">manufacturing</div><div class="d">Recipes, production runs, component consumption, unit cost</div></div>
+        <div class="mod"><div class="t">offers</div><div class="d">Discount rules applied at billing time</div></div>
+        <div class="mod"><div class="t">loyalty</div><div class="d">Points earned and redeemed, per party</div></div>
+        <div class="mod"><div class="t">warranty</div><div class="d">Cover on what was sold, and claims against it</div></div>
+        <div class="mod"><div class="t">installments</div><div class="d">Payment plans and their schedules</div></div>
+        <div class="mod"><div class="t">recurring</div><div class="d">Scheduled sales and purchases, generated on a clock</div></div>
+        <div class="mod"><div class="t">settings</div><div class="d">124 keys, tax rules, price lists, units, categories</div></div>
+        <div class="mod"><div class="t">system</div><div class="d">Backups, off-site copies, restore, updates, version</div></div>
+        <div class="mod"><div class="t">utilities</div><div class="d">Import, export, data checks and repairs</div></div>
+      </div>
+    </section>
+
+    <!-- 08 ───────────────────────────────────────────────────────── -->
+    <section id="data">
+      <p class="eyebrow"><span class="n">08</span> The data model</p>
+      <h2>Seventy-three tables, four families</h2>
+      <div class="cols2">
+        <div>
+          <h4>Documents</h4>
+          <p>Sale invoices, sale returns, purchase invoices, purchase returns, purchase orders,
+            estimates, challans — each a header and its lines, each carrying <code>firm_id</code> and a
+            number from a per-company sequence.</p>
+          <h4>Stock</h4>
+          <p>Items, <code>item_stock</code> (one row per batch), movements, barcodes, serials,
+            repacks, stock takes. Batches carry an expiry; consumption is earliest-expiry-first with
+            the no-expiry batches last.</p>
+        </div>
+        <div>
+          <h4>Books</h4>
+          <p>Chart of accounts, journal entries and lines, account balances. Every document that
+            moves value posts here in the same transaction that writes it.</p>
+          <h4>Company &amp; identity</h4>
+          <p>Firms, settings, roles and permissions, price lists, tax rules — plus the central
+            accounts, memberships, invitations, sessions and auth codes.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <p class="panel-title">The schema declares no foreign keys</p>
+        <p style="margin-bottom:0">
+          Not one <code>REFERENCES</code> clause exists, so <code>PRAGMA foreign_keys = ON</code> —
+          which the storage layer carefully re-applies after every save — has never enforced
+          anything. Declaring them now would mean a table rebuild per constraint, and any orphan
+          already in a shop's data would start hard-failing writes at the till. So the check lives in
+          the test suite instead: <strong>18 relationships, walked on the real database</strong>, and it
+          reports when it had nothing to check rather than passing silently. The shipped database has
+          zero orphans — proved by planting two and watching the check name both.
+        </p>
+      </div>
+    </section>
+
+    <!-- 09 ───────────────────────────────────────────────────────── -->
+    <section id="money">
+      <p class="eyebrow"><span class="n">09</span> Money &amp; tax</p>
+      <h2>A chain, not a slab</h2>
+      <p>
+        Tax is not a per-line rate. It is a firm-level chain of rules applied in order to the running
+        total, each either <em>added</em> on top or <em>deducted</em> out of it. The Uganda default is
+        two deductions:
+      </p>
+      <div class="panel mono" style="font-size:13.5px">
+        1,000 &nbsp;→&nbsp; withholding tax 6% deducted &nbsp;(60) &nbsp;→&nbsp; 940
+        &nbsp;→&nbsp; VAT 18% deducted &nbsp;(169.20) &nbsp;→&nbsp; <b>770.80</b>
+      </div>
+      <p>
+        Rules can be scoped by document type and by how the sale was paid, so a cash sale at the till
+        and a credit invoice can carry different treatment without anybody re-typing anything.
+        Invoice-level rounding lets a shop round cash totals to the nearest 50 or 100 shillings,
+        because coins below that are not really in circulation.
+      </p>
+      <h4>Prices that already include tax</h4>
+      <p>
+        A shop that prices its shelf at 11,800 including 18% VAT is stating a total, not a base. With
+        the setting on, the added taxes come back out first: sub-total 10,000, VAT 1,800, customer
+        pays 11,800 — instead of 11,800 becoming 13,924. It applies only to <em>added</em> rules,
+        because a deduction is taken out of the price the customer pays and there is nothing to
+        include. Every line is rescaled, not just the total, so a line-level report still adds up to
+        the invoice it came from.
+      </p>
+      <h4>The money colours</h4>
+      <p>
+        Three semantic colours, used only for what they mean, and never as the only signal — roughly
+        one man in twelve cannot separate the green from the red, and he is disproportionately likely
+        to be the one behind the counter.
+      </p>
+      <div class="swatches">
+        <span class="sw"><i style="background:var(--good)"></i> received / in</span>
+        <span class="sw"><i style="background:var(--warn)"></i> owed to you</span>
+        <span class="sw"><i style="background:var(--danger)"></i> overdue</span>
+        <span class="sw"><i style="background:var(--accent)"></i> the one accent</span>
+      </div>
+      <p>
+        Receivables ageing uses a four-step sequential ramp whose luminance is strictly decreasing in
+        both themes, measured rather than assumed — and because the two palest steps sit under 3:1
+        against white, <strong>every ageing step carries its figure beside it</strong> rather than
+        relying on the swatch.
+      </p>
+    </section>
+
+    <!-- 10 ───────────────────────────────────────────────────────── -->
+    <section id="screens">
+      <p class="eyebrow"><span class="n">10</span> Screens</p>
+      <h2>A rail in four groups</h2>
+      <p>
+        Thirty-one screens, reached from an indigo rail organised by what a shopkeeper is trying to
+        do rather than by which module owns the data. Every entry is gated twice — by permission and
+        by a module switch — so a feature a shop has turned off is not merely hidden, it is
+        unreachable.
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Group</th><th>Screens</th></tr></thead>
+          <tbody>
+            <tr><td><b>Sell</b></td><td>Dashboard · Till · Sales · Parties</td></tr>
+            <tr><td><b>Stock</b></td><td>Items · Purchases · Stock take</td></tr>
+            <tr><td><b>Money</b></td><td>Cash &amp; bank · Accounting · Reports</td></tr>
+            <tr><td><b>More</b></td><td>Staff · Shifts · Tax &amp; URA · Data tools · Companies · Settings · Manufacturing · Offers · Warranty</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>The four that carry the work</h3>
+      <ul>
+        <li><strong>Till</strong> — keyboard-first: F1 focuses the scanner, Enter adds the top match,
+          F2 discount, F8 hold, Ctrl+P saves and prints. Held bills are claimed per counter, so two
+          tills signed in as the same user cannot resume the same bill.</li>
+        <li><strong>Sales</strong> — invoices, estimates, credit notes, challans, recurring schedules,
+          instalments and loyalty behind one screen and one item table.</li>
+        <li><strong>Reports</strong> — 58 panes across Sales, Purchase, Money, Receivables, Payables,
+          Stock and Tax &amp; books. All 58 open and all 58 print.</li>
+        <li><strong>Settings</strong> — 9 pages after a regrouping that moved item and party defaults
+          onto the screens they govern, with signposts left behind.</li>
+      </ul>
+      <h3>Shared components, not copies</h3>
+      <p>
+        The library is the antidote to the review's first finding — nineteen row menus in twelve
+        files across two implementations, and five separate item tables. <code>doclines</code>,
+        <code>docshell</code>, <code>rowmenu</code>, <code>moneyaccounts</code>,
+        <code>reportshell</code>, <code>settingsui</code> and <code>printprompt</code> are each one
+        implementation used everywhere. A component built twice is fixed once.
+      </p>
+    </section>
+
+    <!-- 11 ───────────────────────────────────────────────────────── -->
+    <section id="workflows">
+      <p class="eyebrow"><span class="n">11</span> Workflows</p>
+      <h2>A sale, end to end</h2>
+      <div class="flow">
+        <div class="step">
+          <div class="marker"><span class="dot"></span><span class="rule"></span></div>
+          <div class="body"><div class="t">Scan or search</div><div class="d">The item is found by barcode, name or code. Its price comes from the party's price list if one applies, then any offer rule that matches.</div></div>
+        </div>
+        <div class="step">
+          <div class="marker"><span class="dot"></span><span class="rule"></span></div>
+          <div class="body"><div class="t">The total is computed twice</div><div class="d">Once in the browser so the figure moves as you type, once on the server on save. The client mirrors the engine exactly; the server is what decides.</div></div>
+        </div>
+        <div class="step">
+          <div class="marker"><span class="dot"></span><span class="rule"></span></div>
+          <div class="body"><div class="t">One transaction</div><div class="d">Invoice and lines, stock out of the earliest-expiring batch, journal entries for cash or receivable, sales and cost of goods, the party balance, the audit row. All of it, or none of it.</div></div>
+        </div>
+        <div class="step">
+          <div class="marker"><span class="dot"></span><span class="rule"></span></div>
+          <div class="body"><div class="t">Committed, then answered</div><div class="d">The commit writes the file synchronously. Only then does the reply go out — so “saved” cannot outrun the disk.</div></div>
+        </div>
+        <div class="step">
+          <div class="marker"><span class="dot"></span></div>
+          <div class="body"><div class="t">Print, if the shop wants it</div><div class="d">A dialogue offers the receipt, or prints straight through, or never asks — a setting with a per-save override. A failed print never makes a saved sale look unsaved.</div></div>
+        </div>
+      </div>
+      <h3>Other paths worth knowing</h3>
+      <ul>
+        <li><strong>Idempotent posting.</strong> Every till sale carries a client-generated reference.
+          A retry after a timeout returns the original invoice instead of ringing it up twice.</li>
+        <li><strong>Held bills.</strong> Parked at the counter, claimed per device, and offered back
+          after a reload — flagged when the bill belongs to somebody else's session.</li>
+        <li><strong>Day close.</strong> Counts the drawer, reconciles against what the till recorded,
+          and posts the variance.</li>
+        <li><strong>Purchase → stock → cost.</strong> A bill with extra landed costs spreads them
+          across the lines, so the cost of goods on the eventual sale is the real one.</li>
+      </ul>
+    </section>
+
+    <!-- 12 ───────────────────────────────────────────────────────── -->
+    <section id="design">
+      <p class="eyebrow"><span class="n">12</span> The design system</p>
+      <h2>Two scales, one accent, and a rule about boxes</h2>
+      <p>
+        An outside design review found three visual layers coexisting and no system at all. What
+        exists now is small enough to hold in your head, and — this is the part that matters — it is
+        <strong>measured by a tool that runs in the browser</strong>, so the next change is judged by a
+        number rather than by whether the screenshot feels tidier.
+      </p>
+      <h4>The type scale — eight steps, each size paired with one weight</h4>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Step</th><th>Role</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">11.5 / 700 caps</td><td><b>caption</b></td><td>labels above fields, table headings</td></tr>
+            <tr><td class="mono">11.5 / 500</td><td><b>hint</b></td><td>the quiet second line under a figure</td></tr>
+            <tr><td class="mono">12.5 / 650</td><td><b>label</b></td><td>a chip, a pill, a small named thing</td></tr>
+            <tr><td class="mono">12.5 / 500</td><td><b>secondary</b></td><td>sub-headings, counts, notes</td></tr>
+            <tr><td class="mono">13.5 / 400</td><td><b>body</b></td><td>everything you read</td></tr>
+            <tr><td class="mono">13.5 / 650</td><td><b>title</b></td><td>card headings, tabs, buttons, rail labels</td></tr>
+            <tr><td class="mono">16 / 700</td><td><b>amount</b></td><td>money in a row or a total block</td></tr>
+            <tr><td class="mono">19 / 750</td><td><b>figure</b></td><td>the number a tile exists to show, and the page title</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Before that pass the stylesheets held <strong>25 distinct font sizes and 9 weights</strong> —
+        12 and 12.5 and 13 and 13.5 all in play, 600 beside 650 beside 780 beside 900. Per page, the
+        combinations roughly halved: Dashboard 20&nbsp;→&nbsp;13, Items 21&nbsp;→&nbsp;11, Cash &amp;
+        bank 18&nbsp;→&nbsp;9, Sales 15&nbsp;→&nbsp;8.
+      </p>
+      <div class="panel">
+        <p class="panel-title">Three combinations nobody had chosen</p>
+        <p style="margin-bottom:0">
+          <code>&lt;b&gt;</code> inherits <code>bolder</code> from the browser's own stylesheet, which
+          resolves <em>relative to the parent</em> — so the same <code>&lt;b&gt;</code> came out 700
+          inside a 400 container and <strong>900</strong> inside a 650 one. No amount of reading the
+          CSS finds that, because the weight is not in the CSS.
+        </p>
+      </div>
+      <h4>The spacing scale — a 2px grid to 24, then coarser</h4>
+      <p class="mono" style="font-size:13.5px;color:var(--ink)">
+        1 · 2 4 6 8 10 12 · 14 16 18 20 · 22 24 · 28 32 40 48 56 · 80
+      </p>
+      <p>
+        43 distinct values became 19, and <strong>nothing moved by more than 2px</strong> — which is
+        precisely why it was safe. Nobody had chosen 9 over 8, or 13 over 12.
+      </p>
+      <h4>The rules that are not about numbers</h4>
+      <ul>
+        <li><strong>Two container levels, maximum.</strong> A page section, and rows within it. Cards
+          inside cards inside cards cost 32–48px of horizontal space per level and add a border the
+          eye must parse. Audited: no page exceeds two.</li>
+        <li><strong>One accent, one destructive, three money colours. Nothing else.</strong> Audited:
+          exactly two filled-button colours on every page.</li>
+        <li><strong>Every money figure is tabular and right-aligned.</strong> Columns that do not
+          align at the decimal point cannot be scanned, and scanning them is the whole job. Audited:
+          zero violations.</li>
+        <li><strong>No new class name in a page file.</strong> If a page needs a visual, it goes in
+          the library.</li>
+        <li><strong>Full screen for a document, a dialog for a decision</strong> — and nothing sticky
+          over scrolling content.</li>
+      </ul>
+      <h4>Density, and a claim that did not survive measurement</h4>
+      <p>
+        Row heights run 45px to 68px across pages, which looks like drift. It is not: every table
+        uses the same cell padding and the same line height, and the heights differ because a party
+        row carries a monogram, an item row a thumbnail, a money row a second line. Reports — a grid
+        of numbers and nothing else — is already at the 45px the review asked for. Tightening the
+        padding to make the numbers agree would have taken 4px off rows that need it and called the
+        result density.
+      </p>
+    </section>
+
+    <!-- 13 ───────────────────────────────────────────────────────── -->
+    <section id="print">
+      <p class="eyebrow"><span class="n">13</span> Paper</p>
+      <h2>The one surface nobody sees fail until a customer is holding it</h2>
+      <p>
+        Two formats out of one code path: an <strong>A4/A5 document</strong> for invoices and reports,
+        and a <strong>thermal receipt</strong> for the counter, at 58mm or 80mm. Both are built as HTML
+        and handed to the browser's own print pipeline — no PDF library, no server-side rendering, and
+        therefore nothing that can be out of step with what is on screen.
+      </p>
+      <ul>
+        <li>Every one of the 58 reports prints, which had not been true: the original page's table
+          rules were overriding the print stylesheet and shredding the layout.</li>
+        <li>The thermal receipt overflowed a real 3-inch roll by 14px, because a <code>76mm</code>
+          width was carrying 7px of padding on each side. <code>box-sizing: border-box</code> and a
+          <code>max-width</code> fixed it — found by rendering it at the roll's real pixel width and
+          looking.</li>
+        <li>A shop can show a preview before printing or print straight through; the till always
+          prints straight through, because a preview at the counter is a queue.</li>
+      </ul>
+    </section>
+
+    <!-- 14 ───────────────────────────────────────────────────────── -->
+    <section id="testing">
+      <p class="eyebrow"><span class="n">14</span> Verification</p>
+      <h2>What has to be green before anything ships</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Layer</th><th>What it proves</th><th class="num">Count</th></tr></thead>
+          <tbody>
+            <tr><td><b>Unit</b> <span class="mono">test/*.test.js</span></td><td>The maths: tax chain, costing, units, tenant classification, referential integrity, the storage boundary</td><td class="num">73</td></tr>
+            <tr><td><b>API</b> <span class="mono">test/*.e2e.js</span></td><td>Onboarding, staff sign-in, the storage split, the settings that used to do nothing</td><td class="num">4 suites</td></tr>
+            <tr><td><b>Browser</b> <span class="mono">e2e/specs</span></td><td>Till, receipts, reports, concurrency, durability, backup, access, layout</td><td class="num">20 specs</td></tr>
+            <tr><td><b>Audits</b> <span class="mono">e2e/*.mjs</span></td><td>Type and container discipline, unreachable controls, dead CSS, stylesheet influence</td><td class="num">5 tools</td></tr>
+            <tr><td><b>Static</b></td><td>Build, import graph, layer boundaries, <code>node --check</code> on every backend file</td><td class="num">4 gates</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Two checks deserve naming. <strong>Layout</strong> walks ten pages at four viewports and
+        asserts every control is reachable and nothing scrolls sideways — the detector stops at the
+        first ancestor that <em>scrolls</em>, because an earlier version stopped at the first
+        <code>overflow: hidden</code> and reported 930 phantom failures. And the <strong>shipped
+        database is byte-identical</strong> after every session: <code>md5 3485fb02…</code>, checked
+        each time, so no amount of testing can quietly edit the thing that ships.
+      </p>
+      <div class="pull">
+        When a new test passes first time, assume it is broken until you have made it fail on purpose.
+        <cite>Learned ten times, the hard way</cite>
+      </div>
+      <p>
+        That rule is not a slogan. Ten checks in this project have passed while being incapable of
+        failing: a guess counter rolled back by the transaction it was written in, so a six-digit code
+        could be walked through all million values; an isolation test run as the account that owned
+        both companies; a “both boxes are gone” assertion on a form that had never opened; control
+        totals of zero matching zero. Each was found by trying to break the check, not the code.
+      </p>
+    </section>
+
+    <!-- 15 ───────────────────────────────────────────────────────── -->
+    <section id="history">
+      <p class="eyebrow"><span class="n">15</span> How it got here</p>
+      <h2>Sixteen rounds of correction, then ten of construction</h2>
+      <p>
+        The numbering is real: each round or session is a commit, a report, and a set of checks that
+        were green before it was called done.
+      </p>
+      <div class="tl">
+        <div class="ev"><div class="when">R1–R6</div><div><div class="t">Correctness, interaction, clipping, copy</div><div class="d">Data bugs, layout that hid controls at real window sizes, and the discovery that settings were never applied in a first session.</div></div></div>
+        <div class="ev"><div class="when">R7–R8</div><div><div class="t">A git history, and the design decisions</div><div class="d">The work stopped being a pile of edits. Period controls, row menus and money semantics were settled once.</div></div></div>
+        <div class="ev"><div class="when">R9</div><div><div class="t">Tenant isolation</div><div class="d">Five real cross-firm vulnerabilities, found by attacking the installation over HTTP as a second tenant.</div></div></div>
+        <div class="ev"><div class="when">R10–R11</div><div><div class="t">Concurrency and durability</div><div class="d">The write mutex, the exec() stack leak, and an acknowledged write that a SIGKILL 100ms later could still lose.</div></div></div>
+        <div class="ev"><div class="when">R12–R13</div><div><div class="t">Backup, restore, off-site</div><div class="d">A restore that reported success while deleting another firm's rows. Verification became part of the feature.</div></div></div>
+        <div class="ev"><div class="when">R14–R16</div><div><div class="t">The screens, in detail</div><div class="d">The photographed screens, the sticky header reconsidered, and money that says what it settles and where it landed.</div></div></div>
+        <div class="ev"><div class="when">S1</div><div><div class="t">Print on every save</div><div class="d">One prompt, three rules: only after a save succeeds; a failed print never unsaves; an explicit print instruction is not a question.</div></div></div>
+        <div class="ev"><div class="when">S2</div><div><div class="t">Bulk update</div><div class="d">Four groups, row edits plus a bulk-actions bar, one audit row per changed field with old → new.</div></div></div>
+        <div class="ev"><div class="when">S3</div><div><div class="t">Settings, regrouped</div><div class="d">14 pages → 9, the sticky banner gone — and 25 switches found that no code anywhere read.</div></div></div>
+        <div class="ev"><div class="when">S4–S6</div><div><div class="t">Many businesses</div><div class="d">Companies, per-company backup with control totals, and the all-businesses panel — every chart a sorted single-hue bar with its name written on it.</div></div></div>
+        <div class="ev"><div class="when">S7</div><div><div class="t">The door</div><div class="d">Sign-up, verification, invitations, password reset — and a refresh token that had been walking past every revocation for thirty days.</div></div></div>
+        <div class="ev"><div class="when">S4.5–S4.6</div><div><div class="t">One file per company</div><div class="d">The storage boundary, made real and enforced; then the shop code that lets a cashier say which shop before typing a username.</div></div></div>
+        <div class="ev"><div class="when">S8</div><div><div class="t">The settings that did nothing</div><div class="d">Five of the 25 built; one relabelled first, because “prices include tax” cannot mean that in a deduct chain.</div></div></div>
+        <div class="ev"><div class="when">S9–S10</div><div><div class="t">Type and spacing</div><div class="d">25 sizes → 9, 43 spacing values → 19, 60 dead CSS rules removed — and a measured correction to the review's advice to delete styles.css.</div></div></div>
+      </div>
+    </section>
+
+    <!-- 16 ───────────────────────────────────────────────────────── -->
+    <section id="gaps">
+      <p class="eyebrow"><span class="n">16</span> Known gaps</p>
+      <h2>What is not true yet</h2>
+      <p>
+        A list that is kept honest is worth more than a list that is short.
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Gap</th><th>Why it matters</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td><b>No mail provider chosen</b></td><td>Verification codes print to the server log until Postmark, Resend or SES is configured — with SPF, DKIM and DMARC on a sending domain</td><td><span class="chip warn">decision</span></td></tr>
+            <tr><td><b>20 settings still inert</b></td><td>Hidden from the Settings page rather than pretending, but still listed in the schema</td><td><span class="chip warn">mapped</span></td></tr>
+            <tr><td><b>styles.css not merged</b></td><td>148 live selectors to move into the design layer; 532 more to confirm by opening the screens that use them</td><td><span class="chip warn">measured</span></td></tr>
+            <tr><td><b>Per-company scheduled backups</b></td><td>Manual export and the forced copy on delete both work; the automatic per-company schedule does not exist</td><td><span class="chip bad">missing</span></td></tr>
+            <tr><td><b>Import as a new company</b></td><td>The renumbering path — “move this shop to a new laptop”. A deleted company's forced copy is not restorable through the interface</td><td><span class="chip bad">missing</span></td></tr>
+            <tr><td><b>Per-account rate limits</b></td><td>Reports and the all-businesses panel are the cheapest denial of service in the app</td><td><span class="chip warn">open</span></td></tr>
+            <tr><td><b>Offline is read-only by design</b></td><td>Selling requires a connection once hosted; every cached figure must say when it was last true</td><td><span class="chip acc">decided</span></td></tr>
+            <tr><td><b>Multi-currency</b></td><td>Single currency across businesses; the panel returns <code>currency_note: "single"</code> so the day that changes, the screen has somewhere to say so</td><td><span class="chip acc">decided</span></td></tr>
+            <tr><td><b>Billing</b></td><td>Plan, status, limits and trial dates carried from the first migration; nothing reads them and no provider is chosen</td><td><span class="chip acc">deferred</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 17 ───────────────────────────────────────────────────────── -->
+    <section id="running">
+      <p class="eyebrow"><span class="n">17</span> Running it</p>
+      <h2>Three ways, one artifact</h2>
+      <ul>
+        <li><strong>Desktop.</strong> Electron wraps the same server and the same built bundle in one
+          window. The database is a file in the application's data folder.</li>
+        <li><strong>Server, one shop.</strong> <code>node backend/server.js</code> with the frontend
+          built; the backend serves <code>frontend/dist</code>, so there is one origin and no CORS in
+          production.</li>
+        <li><strong>Server, many shops.</strong> The same, plus <code>SPLIT_STORAGE=1</code> and a
+          central database — each company gets its own file, opened on demand and closed when idle.</li>
+      </ul>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Setting</th><th>Does what</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">JWT_SECRET</td><td>Signs every session. Production refuses to start without it — a working default would let anyone who unzipped the installer forge an admin token</td></tr>
+            <tr><td class="mono">GENIUS_DB_PATH</td><td>Where the database lives; the central one when storage is split</td></tr>
+            <tr><td class="mono">SPLIT_STORAGE</td><td><code>1</code> for one SQLite file per company</td></tr>
+            <tr><td class="mono">TENANT_MAX_OPEN<br>TENANT_IDLE_MINUTES</td><td>How many company files may be open at once, and how long an idle one is kept</td></tr>
+            <tr><td class="mono">EMAIL_PROVIDER<br>EMAIL_FROM</td><td><code>console</code>, <code>postmark</code>, <code>resend</code>, <code>smtp</code> or <code>none</code>, and the address they come from</td></tr>
+            <tr><td class="mono">APP_URL</td><td>The base for invitation links. Unset, links are built from the address the request arrived on — which is right more often than the development default</td></tr>
+            <tr><td class="mono">LOGIN_MAX_PER_IP<br>LOGIN_MAX_PER_ACCOUNT</td><td>Sign-in throttle, now counted in the database so several processes share one set of attempts</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="end">
+      <span>Genius POS v1.42.0</span>
+      <span>SALJO TECH</span>
+      <span>Billing, stock and books for Ugandan shops</span>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

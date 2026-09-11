@@ -1,0 +1,64 @@
+directories:
+  output: dist-desktop
+  buildResources: build
+appId: com.saljotech.geniuspos
+productName: Genius POS
+copyright: Powered by SALJO TECH
+files:
+  - filter:
+      - package.json
+      - electron/**/*
+      - backend/**/*
+      - backend/node_modules/**/*
+      - frontend/dist/**/*
+      - '!backend/data/**'
+      - '!backend/test/**'
+      - '!backend/seed-large.js'
+      - '!backend/clean-demo.js'
+      - '!backend/audit.aronium.js'
+      - '!backend/database/split.js'
+      - '!backend/package-lock.json'
+      - '!**/*.map'
+      - '!**/.DS_Store'
+asarUnpack:
+  - '**/node_modules/sql.js/**'
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: Genius-POS-Setup-${version}.${ext}
+portable:
+  artifactName: Genius-POS-${version}-portable.exe
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Genius POS
+  deleteAppDataOnUninstall: false
+  installerLanguages:
+    - en_US
+publish:
+  provider: github
+  owner: sajobusinesssolutions-bot
+  repo: GeniusPOS
+  releaseType: release
+linux:
+  target:
+    - AppImage
+  category: Office
+  icon: build/icon.png
+mac:
+  target:
+    - dmg
+  category: public.app-category.business
+  icon: build/icon.png
+electronVersion: 31.7.7

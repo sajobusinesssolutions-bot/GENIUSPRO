@@ -1,0 +1,107 @@
+# ============================================================
+# What goes into the installer, and what must stay out of it.
+#
+# Two rules here cost people a day each if they are got wrong:
+#
+#   · sql.js is WebAssembly. The .wasm and the glue that loads it are
+#     unpacked from the asar archive, together — unpacking only the
+#     .wasm works today by way of Electron's fs shim, and stops working
+#     the moment anything runs outside it.
+#   · `backend/data` is the demo database in the repository. The shop's
+#     real one lives in their profile. Shipping the demo would put a
+#     stranger's books in the installer and confuse a first run.
+# ============================================================
+appId: com.saljotech.geniuspos
+productName: Genius POS
+copyright: Powered by SALJO TECH
+
+directories:
+  output: dist-desktop
+  buildResources: build
+
+# Only what the app runs. `frontend/src`, the tests and the docs are not
+# shipped — the built bundle in frontend/dist is what the server serves.
+files:
+  - package.json
+  - electron/**/*
+  - backend/**/*
+  - backend/node_modules/**/*   # express, sql.js and the rest — stated, not assumed
+  - frontend/dist/**/*
+  - "!backend/data/**"          # the demo database; the real one is per-user
+  - "!backend/test/**"
+  - "!backend/seed-large.js"    # a bench fixture, not something a shop needs
+  - "!backend/clean-demo.js"
+  - "!backend/audit.aronium.js"
+  - "!backend/database/split.js"
+  - "!backend/package-lock.json"
+  - "!**/*.map"
+  - "!**/.DS_Store"
+
+# Read at runtime by a loader that cannot see inside the archive. The whole
+# package goes out, not only the .wasm, so the glue and the binary stay
+# together whichever way node reaches them.
+asarUnpack:
+  - "**/node_modules/sql.js/**"
+
+# Nothing here is a native module, so there is nothing to rebuild.
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  # A hand-built .ico carrying 16/24/32/48/64/128/256 — an auto-converted PNG
+  # sometimes lacks the small sizes Explorer wants, and the taskbar icon then
+  # looks blurred.
+  icon: build/icon.ico
+  artifactName: Genius-POS-Setup-${version}.${ext}
+  # ---- Code signing -------------------------------------------------------
+  # Unsigned installers meet "Windows protected your PC" on every machine
+  # they are sold to, and the warning never goes away because each build is
+  # a new unknown binary. Buy an OV certificate (an EV one earns SmartScreen
+  # reputation immediately), then uncomment and fill these in — or set
+  # CSC_LINK and CSC_KEY_PASSWORD in the environment, which is safer than
+  # putting a path to a .pfx in a file that goes into version control.
+  #
+  # certificateSubjectName: SALJO TECH
+  # timeStampServer: http://timestamp.digicert.com
+  # signingHashAlgorithms: [sha256]
+
+portable:
+  artifactName: Genius-POS-${version}-portable.exe
+
+nsis:
+  oneClick: false                       # let them choose where it goes
+  perMachine: false                     # no administrator needed
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Genius POS
+  deleteAppDataOnUninstall: false       # never delete a shop's books
+  installerLanguages: [en_US]
+
+# ---- Updates --------------------------------------------------------------
+# Where the installed till looks for a newer build. electron-builder writes a
+# `latest.yml` next to the installer in each release, and electron-updater in
+# the app reads it. A public repository needs no token on the reading side.
+#
+# Unsigned builds do update. What signing buys is the absence of a SmartScreen
+# warning on the way in — see the block above.
+publish:
+  provider: github
+  owner: sajobusinesssolutions-bot
+  repo: GeniusPOS
+  releaseType: release
+
+linux:
+  target: [AppImage]
+  category: Office
+  icon: build/icon.png
+
+mac:
+  target: [dmg]
+  category: public.app-category.business
+  icon: build/icon.png

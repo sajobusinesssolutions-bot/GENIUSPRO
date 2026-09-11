@@ -1,0 +1,2337 @@
+GENIUS POS — WHAT'S NEW
+================================
+
+v1.47.0 (9 September 2026) — An Android app, against the hosted books
+-----------------------------------------------------------------------
+
+The same interface, wrapped as an installable Android app, talking to your
+server, which talks to the hosted database. Three parts, and they are not
+interchangeable:
+
+    Android app  ─┐
+                  ├─►  your server (Render)  ─►  Turso (the books)
+    desktop till ─┘
+
+WHY THE APP DOES NOT TALK TO THE DATABASE
+Because it cannot be made safe. The database token is read-write access to
+every shop's books, and an APK is a zip file whose strings anyone can read with
+one command — shipping the token inside the app publishes it. The credentials
+live in the server's environment and nowhere else. This is also the answer to
+"Turso or Render": neither, both. Turso is a database and cannot run your code;
+Render runs your code and has no database of its own.
+
+BUILDING IT
+  npx cap add android        # once
+  npm run android:apk        # every build
+
+Needs a machine with Android Studio. The web build runs first, so the app
+always contains the same interface the desktop and browser get — there is one
+codebase and the app is a shell around it.
+
+FIRST RUN
+The app opens on "Connect to your shop" and asks for the server's web address.
+It checks the address really is a Genius POS server before saving it: one
+mistyped character would otherwise turn into "wrong email or password" on every
+attempt for the rest of the evening, which is an error about the wrong thing.
+Asked once, changeable later under Settings → About & updates.
+
+Building for a single known shop? Bake the address in and the screen never
+appears:  VITE_API_BASE=https://yourshop.onrender.com npm run android:sync
+
+NOTHING CHANGES FOR EXISTING INSTALLATIONS
+With no address configured the interface talks to its own origin, exactly as it
+always has. The browser and the desktop were served by the server they talk to,
+so the question does not arise for them and the screen is never shown.
+
+WHAT THE APP DOES NOT DO
+It does not work offline. No connection means no sales, the same as a hosted
+desktop till — there is no local copy on the phone and nothing queues to be
+sent later. A shop with patchy signal should know that before staff rely on it.
+It also has no camera, printing or push access yet; Capacitor makes those
+reachable but none are wired up.
+
+ALSO
+  · render.yaml deploys against the hosted database now. The persistent disk is
+    gone — there is no file to persist, and a file on one server was never
+    going to be shared with a phone.
+  · The phone counts as a device the account has not used before, so its first
+    sign-in asks for the emailed code, then remembers it for thirty days.
+
+
+v1.46.0 (9 September 2026) — A code to your email, once per device
+-----------------------------------------------------------------------
+
+An account signing in with an email address is now asked for a six-digit code
+sent to that address — but only the first time a given computer or phone is
+used. After that the device is remembered for thirty days and the password is
+enough again.
+
+Once per device rather than once per sign-in is the whole design. A code every
+morning would cost a cashier several minutes at seven o'clock to defend against
+something already defended against on that machine, and a shop whose till waits
+on a mail server is a shop that switches the feature off. What this actually
+stops is the thing worth stopping: a password used from somewhere else.
+
+WHEN THE EMAIL DOES NOT ARRIVE
+Ten single-use backup codes are shown once, when the account is created. Print
+them and keep them where the shop keeps its papers. Without them, a mail outage
+or a changed address is a business that cannot open its own books and a support
+call with no good answer. Settings → Sign-in security prints a new sheet; doing
+so stops the old one working.
+
+WHAT IS NOT AFFECTED
+PIN sign-in at the till is untouched. It is a shop-floor convenience for staff
+standing at a counter, switched on per shop, and most counter staff have no
+email address on file at all — the staff table has no email column. It follows
+that PIN sign-in remains a way into a shop that does not pass through the code
+step: on an installation where that matters, leave PIN sign-in switched off.
+
+Staff signing in with a username and password are likewise unchanged, for the
+same reason: there is no address to send a code to.
+
+ALSO
+  · Settings → Sign-in security lists every device that can skip the code, with
+    when it was last used, and removes any you do not recognise. One button
+    signs every device out for a laptop that has gone missing.
+  · A password reset now clears the trusted devices as well as the sessions. A
+    reset is what somebody does when they believe another person has their
+    password; leaving that person's computer trusted would mean the reset
+    locked the thief out of the password and left the way around it open.
+  · Sign-up already emailed a code to confirm the address. It now also trusts
+    the device that confirmed it, rather than asking for a second code on the
+    very next screen.
+
+
+v1.45.0 (8 September 2026) — The books can live online
+-----------------------------------------------------------------------
+
+Until now a shop's books were a file on one computer, and the Sync screen
+moved a copy of that file between machines: one book, one place at a time.
+Two people could take turns; they could not both sell at once.
+
+This version adds a second way to keep them. Point the app at a hosted SQLite
+database (Turso / libSQL) with two settings and there is one live database
+that every till and phone reads and writes directly. A sale rung up at the
+counter is on the phone in the back office the moment it is saved. Nothing is
+uploaded or brought down, because there is nothing to move.
+
+    GENIUS_DB_URL=libsql://your-shop.turso.io
+    GENIUS_DB_TOKEN=…
+
+Existing installations are untouched. With those unset, everything behaves
+exactly as before, down to the same file in the same place.
+
+WHAT IT COSTS
+The till needs a connection. With the books in a file a broken line was
+somebody else's problem; hosted, a till that cannot reach the database cannot
+sell. There is no offline copy yet. If the shop's internet is unreliable, the
+file is still the better arrangement — the guide says so plainly rather than
+selling the new thing.
+
+The daily whole-file backup also stops, because there is no file on that
+computer to copy. Backups become the hosting provider's, and the Sync screen
+and the log both say so instead of quietly copying nothing. "Download a copy"
+still works, so a shop is never locked in.
+
+MOVING AN EXISTING SHOP UP
+  node backend/tools/books-online.js --from backend/data/genius.db \
+       --to libsql://your-shop.turso.io --token … --dry-run
+
+It never writes to the local file, refuses a destination that already holds
+rows, and copies one transaction per table. Full guide in
+docs/HOSTED-DATABASE.md.
+
+UNDER THIS
+Every database call in the application became a promise, because a call across
+a network cannot be made to look like one into memory. That is 527 functions
+and about 2,000 call sites, done mechanically and checked mechanically. Three
+faults were found and fixed on the way, all of which predated or would have
+been introduced by that change:
+
+  · the idempotency guard on sales, returns and the till (`findByRef`) was
+    left un-awaited by the first pass. A promise is always truthy, so every
+    sale would have been answered "already recorded". Found by a name-based
+    sweep for calls the call graph could not resolve, and fixed.
+  · several screens ran one query per row — the trial balance ran a SELECT per
+    account, the sales-by-item report one per sale. Harmless against a file,
+    a hundred round-trips against a hosted database. Both are now single
+    grouped queries.
+  · the test runner started every async test at once while claiming to run
+    them one at a time, so suites sharing a database interleaved. It now runs
+    them in order, which is what it always said it did.
+
+
+v1.42.0 (3 August 2026) — Modules, part 4: Tax & URA
+-----------------------------------------------------------------------
+
+Five tabs: the VAT working, a checklist to run before filing, the EFRIS
+register, withholding, and what has been filed.
+
+WHAT THIS SCREEN DOES NOT DO
+It does not file anything and it does not send to EFRIS. It works the figures
+out from your own documents and keeps the record of what you did elsewhere.
+Every screen that could be mistaken for a submission says so plainly, because
+a shop that thinks it has filed and has not is a shop with a penalty coming.
+
+It also does not state a legal deadline. The due day is a setting, and the
+screen tells you to check it against the current URA deadline. Deadlines
+change; an app that asserts one with confidence is the app that gets blamed.
+
+THE VAT WORKING
+Output VAT less input VAT, shown as a worksheet — sales, VAT charged, credit
+notes, purchases, input VAT, answer — so you can see how the figure was
+reached rather than being handed it. It prints as a working paper.
+
+If URA owes you rather than the other way round, it says so and colours it
+differently. A refund shown as a bill to pay is worth getting right.
+
+WHAT YOU CANNOT CLAIM
+The number this screen exists for. Input VAT on bills with no supplier TIN
+cannot be claimed, so it is excluded from the return — and then reported
+separately, with the bills named, because that is money the shop paid and can
+often still recover by getting the TIN.
+
+BEFORE YOU FILE
+A checklist: bills with no supplier TIN, large invoices with no customer TIN
+(a registered buyer will come back asking), invoices with no fiscal number,
+and whether your own TIN is on file at all. Each names the documents. A count
+cannot be fixed; a list can.
+
+EFRIS
+A register of what happened on EFRIS, per invoice. Record the fiscal number,
+a rejection and why, or mark an invoice as not needing one. Marking something
+as sent requires the fiscal number — without it there is nothing to reconcile
+later, and it may as well not have been sent.
+
+WITHHOLDING
+Both directions, kept apart because they are easy to confuse: tax you withheld
+from a supplier and now owe URA, and tax a customer withheld from you, which
+is money already paid on your behalf. A supplier whose TIN is missing is
+flagged, since they cannot be given a certificate.
+
+FILING HISTORY
+Every period for the last year, filed or not, so a missed month shows as a gap
+rather than being absent. On time, late or overdue is judged against your own
+due date, and the next one due is at the top.
+
+ONE THING WORTH KNOWING
+If you have more than one tax set up — VAT and a local levy, say — only VAT
+goes into the VAT return. The app needs to know which of your taxes is VAT;
+it assumes one called "VAT" and you can change that under Settings → General.
+If no such tax exists the screen says so, rather than showing a return of zero
+that looks like a quiet month.
+
+34 unit tests still pass.
+
+v1.41.0 (3 August 2026) — Modules, part 3: Staff
+-----------------------------------------------------------------------
+
+The Staff entry used to open a second copy of the user list — the same
+accounts and roles that Settings already manages properly. It now opens
+something that did not exist before: what the team actually did.
+
+Three tabs.
+
+ON TODAY
+Every shift opened today: who, when they came in, when they left, hours so
+far, how many bills they rang up and what those came to. Across the top, the
+figure worth knowing — what an hour of staff time brought in.
+
+Anyone rostered who has not opened a shift is listed underneath. Anyone who
+came in later than their rostered start, by more than the few minutes you
+allow, is marked late on their row.
+
+Shifts are the only arrival this app can honestly witness — they are opened at
+the till. There is no clock-in from a phone because there is no phone app, and
+inventing one would mean recording arrivals that never happened.
+
+WHAT THEY SOLD
+Per person, per month: bills, sales, average bill, discount given, what came
+back, net, and sales per hour worked.
+
+Returns count against whoever made the original sale, not whoever happened to
+process the return. The person who handled the return did not cause it.
+
+WHAT THEY ARE OWED
+Commission, at last, as a real feature.
+
+Until now the only commission in the app was a percentage you typed into a
+report to see a number. That number could not be paid out, could not be
+audited, and vanished when the page closed.
+
+Commission is now a rate stored against each person, with a shop-wide default
+for everyone who does not have their own. Set both under Terms on this screen
+and Settings → General.
+
+It is earned on NET sales — sold, less returned. Paying on gross would mean a
+sale returned the next day still earned its commission, which is exactly how a
+commission scheme gets gamed. Each row shows the clawback where returns have
+eaten into it.
+
+ROSTERED HOURS
+Set a start and end time per person. This is what "late" and "absent" are
+measured against — without them nobody can be late, because there is nothing
+to be late for. The grace period is under Settings → General.
+
+WHAT IS NOT HERE
+Payroll, PAYE and NSSF. Those need statutory rates and bands that change by
+law and by year, and a number this app invented is a number somebody might
+file with URA. Commission is calculated and shown as owed, and stops there.
+
+34 unit tests still pass.
+
+v1.40.0 (3 August 2026) — Modules, part 2: Instalments and Loyalty
+-----------------------------------------------------------------------
+
+Both have moved into Sales as tabs, the same way Recurring did. A payment plan
+is a sale collected in pieces, and loyalty points are earned by selling — a
+shopkeeper looking at sales should not have to leave to find either.
+
+Old links still work and land on the right tab.
+
+INSTALMENTS
+Three sub-tabs: Due Soon with a count of who is behind, All Plans, and
+Payment History.
+
+Across the top: what is still to collect, and — when anyone is behind — what
+is overdue right now, in red. When nobody is behind, that second figure
+switches to what is expected this month instead, since there is no point
+shouting about arrears that do not exist.
+
+• Due Soon lists each instalment that has fallen due, whose it is, how late,
+  and a button to take the money.
+• All Plans shows each plan's shape (4 × monthly, deposit paid), how much has
+  come in as an amount and a percentage, when the next payment falls, and
+  whether it is on track or in arrears.
+• Setting up a plan shows the whole schedule, every date and amount, before
+  you commit. The dates come from the server, so what you approved is what
+  gets saved.
+
+One thing worth knowing: an instalment is not paid as its own document. Money
+is recorded against the invoice in the ordinary way, and the schedule settles
+the earliest unpaid instalment first. That is why the plan can never disagree
+with the books — there is only one place money goes in.
+
+LOYALTY
+Three sub-tabs: Can redeem, All Members, and Points History.
+
+"Can redeem" is first because it is the useful one: a customer who does not
+know they have points does not come back for them.
+
+Across the top: points outstanding, and what they would cost you if everyone
+redeemed at once. That second figure is a real liability and was not visible
+anywhere before.
+
+The scheme is spelled out in words above the list — one point per so much
+spent, what a point is worth, the minimum to redeem, whether they expire.
+
+Redeeming records that the points were spent and says, plainly, that taking
+the money off the bill still happens at the till. A shopkeeper who assumes
+otherwise hands over the discount twice.
+
+Adjusting a balance by hand requires a reason, and records who did it.
+
+TABS FOR SWITCHED-OFF FEATURES
+Recurring, Instalments and Loyalty only appear when switched on under
+Settings → Modules. Previously the Recurring tab showed regardless, which is a
+tab that leads nowhere.
+
+34 unit tests still pass.
+
+v1.39.0 (3 August 2026) — Fixes
+-----------------------------------------------------------------------
+
+REPORTS WOULD NOT OPEN
+The screen crashed the moment it was clicked. When the Reports screen was
+rebuilt, a block of settings was deleted that took six values with it — the
+list of report groups among them — while the code that reads them stayed
+behind. Restored.
+
+ITEM SEARCH AND "ADD A CUSTOMER" DID NOTHING
+This was one fault behind most of what felt broken: creating an invoice,
+recording a purchase, setting up a recurring sale, and building an instalment
+plan.
+
+Search results and the add-a-customer dialog were opening *behind* the panel
+that asked for them. They were there the whole time, underneath. The panels
+introduced during the redesign sat higher than the lists and dialogs they
+open, and nothing catches that — it does not break the build and it does not
+throw an error; the thing simply appears where you cannot see it.
+
+Everything that opens on top of something else has been put in one order:
+panel, then dialog, then dropdown, then confirmation, then notices. There is
+now a check that fails if that order is ever broken again.
+
+SECOND UNIT LEFT THE QUANTITY AT 1
+Selling a bag as loose kilos should turn 1 bag into 50 kg. If you had clicked
+into the quantity box first, it stayed at 1.
+
+The quantity box was holding what you had typed and writing it back when it
+lost focus — which happened *after* the unit changed, so it overwrote the
+conversion. The box now discards what it was holding when the value changes
+underneath it, and the unit buttons act before the box lets go rather than
+after.
+
+NEW PRODUCT AND NEW SERVICE
+• Products now ask whether to count stock. Airtime, printing and
+  anything bought to order is sold but not counted, and the app was assuming
+  every product was counted.
+• Barcodes are gone from the service form, and the stock fields with them.
+• Choosing "service" or "not counted" hides everything that no longer applies
+  rather than leaving dead fields on screen.
+
+BETTER ERRORS
+A form that left out a required field got back "Server error" with a reference
+number. The database refused the empty value before the form's own checks
+could run. Missing fields are now treated as empty, so you get "Choose an
+invoice" or "Choose a customer first" — the message that was written for it.
+
+CHECKED END TO END
+Creating a counted product, an uncounted product and a service; selling each
+at the till; selling in both units; a credit invoice; a purchase in both
+units; a recurring sale and a recurring purchase; and an instalment plan.
+Stock arithmetic balances exactly — a 50 kg sale takes one bag off the shelf.
+
+34 unit tests still pass.
+
+v1.38.0 (3 August 2026) — The forms that were left behind
+-----------------------------------------------------------------------
+
+Screens were rebuilt one at a time, but the forms and dialogs inside them
+often were not. The result was a screen in the new look opening a dialog in
+the old one. This closes that gap.
+
+HOW IT WAS DONE
+Rather than hand-convert nine forms and inevitably miss one, the shared
+pieces every form is built from — the dialog frame, labels, inputs, buttons,
+tables, totals blocks — were restyled once. Every form that uses them picked
+up the new look at the same moment, and the next form written will get it for
+free rather than needing the same work again.
+
+WHAT THAT COVERS
+• Recording a purchase bill, including the order picker and the extra-costs
+  block.
+• Debit notes and expenses.
+• Settings → Taxes: the chain on the left, and what it does to a real bill on
+  the right, so you can see the effect of a rate before saving it.
+• Settings → Price lists, Print, Backup, About and the updater.
+
+A DUPLICATE REMOVED
+Settings had its own Units and Item categories editors — a name, and a button.
+The Items screen has proper ones: how many items use each unit, which
+conversion pairs are actually in use, what each category holds in stock, and a
+colour per category.
+
+Two places to add a unit, one of them worse, is a trap: you use the thin one,
+wonder why it tells you nothing, and never find the good one. Settings now
+sends you to the Items screen for both. Party groups stay in Settings, since
+they have nowhere else to live.
+
+BACKUP
+Split into two plain halves — take a copy, and put one back — instead of one
+column with the restore control tucked underneath. What restoring will do, and
+what you would lose, is still shown before anything happens.
+
+34 unit tests still pass.
+
+v1.37.0 (3 August 2026) — New item screen
+-----------------------------------------------------------------------
+
+The Items screen was rebuilt a while back, but the form behind "New product"
+was not. It still had the old four tabs — Details, Price & tax, Stock control,
+Image & colour — which meant filling in one item involved visiting four
+places, and no single view of what you had entered.
+
+It is now one page, in the same style as everything else.
+
+WHAT CHANGED
+• Name and code, then category and type, at the top.
+• Units and conversion in one block. Pick a base unit and, if you want one, a
+  second unit; it then shows "1 BAG = 50 KG" and a line saying how the stock
+  will actually read — "9 BAG · 450 KG" — so you can see whether you have set
+  it up the way you meant before you save.
+• Sale price, cost and markup on one row, still following each other: change
+  the markup and the sale price catches up, change the sale price and the
+  markup does.
+• Opening stock and reorder level together.
+• Barcodes with the same add-several behaviour as before, and the generator.
+• The switches — active, price locked at the till, serial tracking, default
+  quantity — as a plain row of checkboxes at the foot.
+• Photo, colour and the accounting accounts behind one heading. Most items
+  never need any of them, and they were taking up a whole tab each.
+
+SAVE & ADD ANOTHER
+New button. It saves, clears the name, code, prices and photo, and keeps the
+category and unit — because entering a shelf of stock means the same category
+and unit over and over, and re-picking them thirty times is the slow part.
+
+FIXED
+Pressing "New service" on the Services tab opened a product form, with stock
+fields and everything. The tab you press from is now respected.
+
+34 unit tests still pass.
+
+v1.36.0 (3 August 2026) — Modules, part 1: Recurring
+-----------------------------------------------------------------------
+
+WHERE IT LIVES NOW
+Recurring has stopped being a screen of its own. Recurring sales are a tab in
+Sales; recurring purchases are a tab in Purchases. They are sales and
+purchases — a shop looking at its sales should not have to leave to find the
+ones that repeat.
+
+Old links and search results still work; they land on the right tab.
+
+SETTING ONE UP
+The same invoice screen as a normal sale — same customer picker, same item
+table, same tax and unit handling — with a Recurring Schedule block at the
+foot: a description, how often, and the date to start. There is a switch for
+whether the schedule is live, so you can build one now and turn it on later.
+
+Reusing the invoice screen is the point. A recurring sale that calculated tax
+or units differently from a one-off would be a bug waiting to happen, and
+that is exactly what a second, separate form invites.
+
+The first document is raised on the start date, not when you save. Nothing
+touches stock or the books until it actually runs.
+
+THE LIST
+Three sub-tabs, smaller than the tabs above them so the nesting reads as
+nesting:
+  • Due Soon, with a count when anything is waiting
+  • All Schedules
+  • Payment History — everything these schedules have actually raised
+
+Above them, two figures: projected monthly revenue, and what is still expected
+this month. The projection converts everything to a monthly figure so a weekly
+schedule and a yearly one can be added together honestly. "Expected this
+month" counts every run still to come before month end, not just the next one
+— a weekly schedule bills four more times, not once.
+
+Both figures are subtotals before tax, deliberately. Tax varies by party and
+by item, and a projection that is confidently wrong is worse than one that is
+plainly a subtotal.
+
+Days Left says what it means: "2 days overdue" in red, "Due today", "5 days
+left". A paused schedule shows nothing there rather than counting down to a
+date it will not act on.
+
+From any row: raise it now, pause it, edit it, or delete it. Deleting stops
+the schedule and leaves everything it has already raised alone.
+
+A run that fails is recorded as a failed run with the reason, and shows in
+Payment History. A schedule that cannot bill — because the price is below cost,
+say — should say so, not fail silently.
+
+FIXED
+The "Invoice builder" entry in the menu opened the invoice list rather than
+the builder.
+
+34 unit tests still pass.
+
+v1.35.0 (3 August 2026) — Design deck, session 14: Sign in
+-----------------------------------------------------------------------
+
+THE SCREEN
+Two panels. On the left, what the app is and what it does, with your business
+name and the version running. On the right, signing in. On a narrow screen the
+left panel drops away — it is a description the person has already read.
+
+SIGNING IN WITH A PIN — NEW
+Four digits instead of a password. At a counter, typing a full password every
+time somebody swaps shifts is a nuisance people work around by sharing one
+login, which is worse than the problem.
+
+  • PINs are set per person under Settings → Users & roles.
+  • They are stored scrambled, exactly like passwords. Nobody can read one
+    back afterwards, including whoever set it.
+  • Obvious PINs are refused — 1234, 0000, 1111 and the like are the first
+    anyone would try.
+  • Signing in with a PIN still needs the username alongside it. Four digits
+    on their own is ten thousand guesses, and the only thing standing in the
+    way would be the lockout counter.
+
+THE STAFF PICKER — NEW, AND OFF BY DEFAULT
+Names and roles on the sign-in screen, so somebody taps their name instead of
+typing a username.
+
+This is genuinely quicker at a busy counter. It also tells anyone standing in
+front of the screen who works here and what each of them does, before they
+have signed in to anything. That is a reasonable trade in a shop and a bad one
+in an office, and it is not our call to make — so it is off until you switch
+it on under Settings → General, and so is PIN sign-in.
+
+WHAT WAS NOT BUILT, AND WHY
+The design also shows a "scan QR from the phone app" button and a list of
+companies on this device with sync status. There is no phone app to scan from
+and no sync to report on, so neither is there. A button that does nothing is
+worse than a button that is missing.
+
+"Trust this counter for 30 days" is likewise absent: it needs a device
+identity and a token that outlives a session, which is a security design
+rather than a switch.
+
+34 unit tests still pass.
+
+v1.34.0 (3 August 2026) — Design deck, session 13: Settings & permissions
+-----------------------------------------------------------------------
+
+THE SHELL
+Every settings subject down one list on the left, the page open beside it.
+The old grid of coloured tiles cost a click to reach anything and gave no
+sense of what else was there.
+
+Save and Discard sit at the top and say how many changes are waiting, so you
+always know whether you have unsaved work. Pages that save one thing at a time
+— taxes, price lists, roles, printing — keep their own buttons rather than
+pretending to belong to a page-wide save.
+
+Settings for features you have switched off no longer appear in the list.
+
+USERS & ROLES — NEW
+Two views. Staff accounts: add someone, give them a role, switch an account
+off when they leave. And what each role may do.
+
+PERMISSIONS IN PLAIN ENGLISH
+The permission screen now asks questions — "Give a discount", "See cost price
+and margin", "Write off a debt", "Delete all data" — 36 of them across seven
+groups. Nobody setting up a shop thinks in terms of "sales.create"; they think
+in terms of what the person at the counter is allowed to do.
+
+Each question maps to the permissions the server actually checks, and that
+mapping lives on the server. This matters more than it sounds: if the screen
+kept its own list, a permission could show as allowed here while the app
+refused it in practice, and nobody would know why. Every permission the app
+enforces is reachable from this screen, and nothing on this screen grants
+something the app does not enforce. That was checked, not assumed.
+
+TWO THINGS THE SCREEN NOW REFUSES TO DO QUIETLY
+• It will not let you remove user management from the last role that has it.
+  A shop that locks itself out of its own user list cannot get back in.
+• If a role holds half of what a question needs — say it can add a customer
+  but not edit one, where the question covers both — the question reads as
+  blocked, and saving would drop the stray half. The screen now says so, in
+  words, before you save. It used to be that this simply happened.
+
+ABOUT THE MIDDLE SETTING
+The design offers three states: allowed, needs a nod, and blocked, where
+"needs a nod" means a manager approves at the moment it happens. Nothing in
+the app can ask for that approval — it would need a prompt everywhere it
+applies and a record of who approved what. So the screen offers two states and
+says why, rather than showing a third that quietly did nothing. The
+permissions where an approval step would make sense are already marked in the
+code for whenever that gets built.
+
+34 unit tests still pass.
+
+v1.33.0 (31 July 2026) — Design deck, session 12: Stock take
+-----------------------------------------------------------------------
+
+Three tabs: the count you are working on, the ones you have finished, and what
+all that counting has actually been telling you.
+
+COUNTING NOW
+Across the top: how far through you are, how many matched, how many differed
+and which way, and what posting the count would do to the value of your stock.
+That last figure moves as you type, so you know before you commit.
+
+The sheet itself shows system against counted, the difference, and what the
+difference is worth. Blank lines are drawn as blank, not as zero — an item you
+have not reached yet is not an item you counted as none. Scan a barcode to
+jump to a line and start typing. "Differences only" hides everything that
+matched once you have worked through a section.
+
+Two helpers at the foot: save a draft, or fill the blanks with what the books
+already say. The second asks first and says plainly that it is not the same as
+counting those shelves.
+
+POSTING — WHAT CHANGED AND WHY
+A count that differs now has to say why: spoilage, theft, a keying error,
+breakage, or a genuine recount. And which expense account the write-off should
+land in.
+
+Until now every count landed in one bucket. That meant that months later,
+"the shop is losing stock to theft" and "somebody keyed a delivery wrong"
+looked identical in the books, and nothing could be done about either. Posting
+without a reason is now refused.
+
+Both the reason list and the account are checked on the server, so a count
+cannot be filed under something the books do not recognise.
+
+VARIANCE REPORT
+The new tab. Which items keep coming up short, how many times each was counted
+and how often it was wrong, and what it has cost in shillings — with the same
+totals grouped by the reason given. An item that is short every single time is
+a different problem from one that was short once, and this is the only view
+that can tell them apart.
+
+PAST COUNTS
+Every count with who ran it, what it covered, the reason given and its value
+effect. A draft can be abandoned; a posted count cannot be deleted, because it
+has already moved stock and written to the ledger — count again to correct it.
+
+34 unit tests still pass.
+
+v1.32.0 (31 July 2026) — Design deck, session 11: Dashboard
+-----------------------------------------------------------------------
+
+What you want before doing anything else.
+
+ACROSS THE TOP
+• Sales today, with how that compares to yesterday, how many bills it took and
+  what the average bill came to. Voided sales are left out of all three.
+• What should be in the drawer, and the float it started from. If no shift is
+  open it says so rather than showing a figure that would be wrong.
+• The day drawn as a curve, hour by hour, with the busiest hour marked. Flat
+  where nothing sold — a quiet morning is worth seeing.
+
+MONEY OWED TO YOU
+The total, and one bar split into 0–30, 31–60, 61–90 and over 90 days, oldest
+reddest, with the amounts underneath. Straight through to Parties to collect.
+
+NEEDS YOU NOW
+Only what is actually true: items at or below their reorder level, batches
+expiring soon and what they are worth, and bills parked at the till. Each one
+goes straight to where you would deal with it. When none of it applies the
+panel says the shop is clear instead of showing three empty rows.
+
+BELOW
+Best sellers this month — units sold, what is left on the shelf, and revenue,
+ranked. And the latest bills with who, when and how they paid.
+
+The whole screen is one request. Everything on it comes back together, so
+nothing arrives late and disagrees with what is next to it.
+
+FIXED
+The best-seller list was meant to show how many of each item are left. The
+figure was being dropped before it reached the screen, so it never appeared.
+
+A NOTE ON THE DATE FILTER
+The old dashboard had a date range across the top. This design is a today
+screen and does not have one — the period views it used to give now live in
+Reports, which does them properly. Say if you want the range back.
+
+34 unit tests still pass.
+
+v1.31.0 (31 July 2026) — Design deck, session 10: Reports
+-----------------------------------------------------------------------
+
+Seven group tabs across the top — Sales, Purchase, Money, Receivables,
+Payables, Stock, Tax & books — the reports in that group down the left, and
+the one you picked open beside them.
+
+The old screen was a hub of cards: you clicked in, read a report, clicked back
+out, and clicked in again for the next one. Now the list stays put and only
+the right-hand pane changes, so working through a group is a column of clicks.
+Opening a group shows its first report straight away rather than an empty pane
+asking you to click again.
+
+Each report carries your business name, the period it covers, and its headline
+figure across the top. Favourites are still there, now a star on each row in
+the list.
+
+Sorting, the column picker, CSV export, the totals band and the printed header
+are unchanged — this changes how you reach a report, not what a report is.
+
+FIXED — A REPORT THAT HAD NEVER WORKED
+"Purchase by item" failed with an error every single time it was opened. It
+was looking for a column that does not exist on the purchase lines table, so
+it could never have returned anything. Fixed, and every one of the 58 reports
+in the list was then opened in turn to check the same thing was not true
+anywhere else. All 58 now return.
+
+34 unit tests still pass.
+
+v1.30.0 (31 July 2026) — Design deck, session 9: Accounting
+-----------------------------------------------------------------------
+
+Six views of the same books, through one table. The design draws it that way
+and it is right to: a chart of accounts and a profit and loss are the same
+records at different grains, and giving each its own table is how they end up
+disagreeing about what a total looks like.
+
+THE SIX VIEWS
+• Chart of accounts — code, account, group, balance.
+• Books health — every integrity check with a pass or a look-at-this, and the
+  detail behind it.
+• Journals — one row per entry, with journals made by hand flagged.
+• Profit & loss — every line with its share of income beside it.
+• Balance sheet — assets, liabilities and equity as at the To date, and a
+  plain statement of whether it balances.
+• Day book — every posting line that hit the ledger, not just the headings.
+
+ACROSS THE TOP
+One date range that every view respects, and four figures: the number that
+matters for the view you are on, whether the books balance and by how much if
+they do not, how many journals were made by hand, and how far back the ledger
+runs.
+
+Any view exports to CSV or prints with your business name and the period on
+it.
+
+TWO PANELS THAT SAY SOMETHING ELSE
+The design shows "Unposted journals" and "Period locked to". This app has
+neither — every journal posts the moment it is made, and there is no period
+lock — so rather than show two figures that would always read zero, those
+slots carry what the books do have: journals made by hand, and the date the
+ledger starts. If you want a period lock, say so and it can be built properly.
+
+Adding an account sits on the chart of accounts view rather than in the
+toolbar, next to Export and Print, since that is the only view it applies to.
+
+UNDER THE BONNET
+• New endpoint /accounting/overview. Everything else this screen shows was
+  already there — no new figures were invented for it.
+
+Checked against real postings: 15 accounts, 6 health checks passing, and a
+balance sheet where assets equal liabilities plus equity to the shilling.
+
+34 unit tests still pass.
+
+v1.29.0 (31 July 2026) — Design deck, session 8: Money
+-----------------------------------------------------------------------
+
+Where the shop's cash actually is, and what is about to move.
+
+ALL MONEY
+• A card for every account you keep money in, and the total across them. These
+  are the accounts you have actually set up, not a fixed list — add an MTN MoMo
+  account and it gets a card and a tab of its own; never open a bank account
+  and you never see an empty bank panel.
+• Recent movement in one table: what kind, what it was, which account, in and
+  out.
+• In and out this month as two bars measured against the larger of the pair,
+  so a month where far more went out than came in looks like it.
+• Due this week, both directions, with the net underneath — the number that
+  answers "will I be short on Friday".
+
+CASH DRAWER
+Today's cash book beside a denomination counter. Type what you have counted
+and it tells you whether the drawer matches the books, and by how much. It is
+a check, not a close: closing the shift for real happens at the till, where
+the count is recorded against the shift. Two places that both close the drawer
+is one place too many.
+
+EVERY OTHER ACCOUNT
+Bank, mobile money, or anything else — the same statement view with a date
+range, because it is the same question asked of a different account.
+
+PAYMENTS, EXPENSES AND OTHER INCOME
+These are records of individual documents rather than a view of an account, so
+they now sit behind their own tab instead of being the whole screen.
+
+NOT BUILT — AND WHY
+The design also names a cheque register and a loan ledger. Each needs its own
+records this app does not keep yet, and guessing at how a shop tracks a
+post-dated cheque or a bank loan seemed worse than leaving them out and
+asking. They are not stubbed or faked here.
+
+UNDER THE BONNET
+• New endpoints /money/overview and /money/movements.
+
+34 unit tests still pass.
+
+v1.28.0 (31 July 2026) — Design deck, session 7: Purchases
+-----------------------------------------------------------------------
+
+The mirror of Sales, and built from the same parts. The table chrome — title,
+quick filters, one search box, one date range, the pager pinned to the foot —
+now lives in one place and is shared by both screens, so they cannot drift
+apart and the next document screen costs a table and nothing else.
+
+ABOVE THE LIST
+• Bought, with a bar splitting it into settled and outstanding.
+• You owe, how many bills fall due in the next seven days, and how many are
+  already overdue.
+• Awaiting delivery: orders placed and not yet received, and what they are
+  worth. Money committed that is neither a bill nor stock on the shelf yet.
+
+Each tab brings its own panels. Orders show what is on order. Debit notes show
+what has gone back and what share of everything bought that is. Expenses show
+the month so far, kept apart from bills — rent and fuel are money out, but
+they are not stock and not owed to a supplier.
+
+BILLS
+Quick filters — All, Unpaid, Overdue, Paid — worked out on the server, so they
+narrow the whole book and the count under the table is the count for that
+filter. A bill still owing past its due date now reads "overdue", and the pill
+beside a row and the filter above it are decided by the same rule.
+
+PURCHASE ORDERS
+The reorder suggestions moved to the top of this tab, which is where you are
+standing when you decide what to buy. Opening an order now shows what it is
+worth and how much of it is still to come, alongside the line-by-line
+outstanding count.
+
+EXPENSES
+Their own tab with a running total for whatever filter is applied.
+
+UNDER THE BONNET
+• New endpoint /purchases/overview.
+• The bills list accepts ?status=paid|unpaid|overdue|partial.
+• The shared table lives in lib/deckui.jsx.
+
+Note: the forms for entering a bill, a debit note or an expense are unchanged
+this round — the deck does not draw them, and they take the new colours
+through the shared palette. They get their own pass later.
+
+34 unit tests still pass.
+
+v1.27.0 (31 July 2026) — Design deck, session 6: the till (part two)
+-----------------------------------------------------------------------
+
+The Administrator button is now on the till bar, with the drawer behind it and
+the six things it opens. That completes the till.
+
+THE DRAWER
+Cash in / out · Credit payments · Find receipt · Previous sales · X report ·
+End of day, then back to the dashboard or sign out.
+
+CASH IN / OUT
+Money into or out of the till that is not a sale: the opening float, an owner
+top-up, a run to the bank, fuel for a delivery. Every movement needs a reason,
+the reasons come from the server so nothing can be filed under something the
+books do not recognise, and the dialog shows what the drawer will hold once it
+is recorded.
+
+END OF DAY
+Counted by denomination, because that is how cash is actually counted and a
+total typed straight in is a total nobody checked. It shows expected against
+counted, whether you are short or over, and will not close the shift on a
+difference until somebody has said why.
+
+CREDIT PAYMENTS
+The whole debtors' queue on one screen, biggest first, each with its oldest
+unpaid bill and how many days old it is. Take money from any of them without
+leaving the till.
+
+PREVIOUS SALES · FIND A RECEIPT
+Everything rung through today with reprint and void, and a scan box that takes
+a barcode or a typed invoice number.
+
+AN IMPORTANT FIX — WHAT THE DRAWER SHOULD HOLD
+Expected cash was wrong in three ways, and each one made an honest till look
+short or over at close:
+
+  • Money handed INTO the drawer had nowhere to be recorded at all. An owner
+    topping up the float made the till read as over by that amount, every time.
+  • Cash was counted from invoices marked "cash", so a debt collected at the
+    till did not count — the money was in the drawer and the figure did not
+    know.
+  • For the same reason, a credit bill part-paid in cash was missed too.
+
+Cash is now counted from the payments ledger, which carries the tender each
+payment was actually taken in, and hand movements are counted alongside it.
+The Z report was corrected the same way, so it and the shift close cannot
+disagree.
+
+Checked end to end: opening float, a cash sale, a credit sale, a debt
+collected in cash, an owner top-up and a bank deposit each move the expected
+figure by exactly the right amount.
+
+34 unit tests still pass.
+
+v1.26.0 (31 July 2026) — Design deck, session 5: the till (part one)
+-----------------------------------------------------------------------
+
+The till is the screen used standing up, at speed, often on a touch monitor.
+This rebuilds its three main views to the deck. The Administrator drawer and
+the ten dialogs it opens — cash in and out, credit collections, find receipt,
+previous sales, X report, end of day — are part two. The button for it is not
+on the bar yet, because a button that opens nothing is worse than one that is
+not there.
+
+THE BAR
+Close till, the shop and who is on it, whether you are online, and what the
+drawer should hold. The drawer figure is the cash line of today's takings; if
+it cannot be read it is left off rather than shown as zero, because a wrong
+number on a till is worse than no number.
+
+THE CART
+• A single scan box across the top. Type or scan, Enter takes the top match.
+  If nothing matches, one press adds the item without leaving the sale.
+• Category chips, and bills on hold gathered behind one button.
+• Every line shows what it is priced per. Quantity and price are edited in
+  place.
+• Dual-unit items get a menu on the line — sell this one by the bag, that one
+  by the kilo. The price converts with it, so the amount never jumps.
+• Discounted, low-stock and fixed-price lines are marked on the line itself.
+
+TAKING PAYMENT
+• Order on the left, money on the right.
+• A keypad, because a till often has a touch monitor and no keyboard. The
+  physical number keys still work and write to the same field.
+• Quick amounts start with the exact total, then the notes people actually
+  hand over.
+• As you type it shows the change to give, or how much is still short, in
+  green or red.
+• Confirm & print will not fire while the sale is short.
+• On account: what the customer's balance would become, and a warning if that
+  is over their limit.
+
+WHEN IT IS DONE
+A sale used to end by snapping back to an empty cart, with only a small notice
+to say it had saved. It now ends on its own screen: paid in full or on
+account, the total, the change to hand over, and the receipt exactly as it
+will print. From there: next sale, print again, send on WhatsApp, or close the
+till.
+
+FIXED
+• A component was used on the till without being imported. That kind of
+  mistake compiles cleanly and only fails when the screen is opened, so there
+  is now a check for it — run `node check-imports.mjs` in the frontend folder.
+
+34 unit tests still pass.
+
+v1.25.0 (31 July 2026) — Design deck, session 4: Parties
+-----------------------------------------------------------------------
+
+FIRST, A FIX FROM LAST TIME
+The Unpaid and Overdue filters on Sales only sifted the rows already loaded.
+On page 1 of 25, "Overdue" showed the overdue bills on page 1 and the count
+underneath still described everything. The rule that decides whether a bill is
+overdue now lives on the server, in the same order the coloured pill uses, so
+a filter narrows the whole book and the count below the table is the count for
+that filter.
+
+PARTIES
+Customers and suppliers share one list. A shop that buys from someone it also
+sells to should not have to remember which drawer they are in.
+
+• Net position across the top: what you are owed less what you owe, green when
+  it is in your favour and red when it is not, with the two halves beside it.
+  "You owe suppliers" says how many bills fall due in the next seven days —
+  what is about to land, which is a different question from what is late.
+• The list carries initials, what they are, and their balance: green when they
+  owe you, red when you owe them.
+• Filter to customers, suppliers, or just the ones with a balance.
+
+THE ACCOUNT
+• Name, phone and TIN, with chips for their price list, credit limit and days
+  to pay.
+• A chip that says whether anything of theirs is overdue — read from their own
+  unpaid bills rather than a note somebody typed in once.
+• The balance, and what to do about it: remind them on WhatsApp, or record a
+  payment. Recording one opens already pointed at that party, and at the right
+  direction — money in from a customer, money out to a supplier.
+
+THE STATEMENT
+Every sale, purchase, payment and note in date order, each with a running
+balance so a line reads "and after this they owed…". The balance is worked
+backwards from where the account stands now, so the top of the statement
+always agrees with the figure above it. Print it for any party.
+
+Special prices and price-list assignment stay, rebuilt to match the rest of
+the column.
+
+UNDER THE BONNET
+• New endpoint /parties/overview.
+• Party detail now returns which way each statement line moves the balance,
+  rather than leaving the screen to guess it from a label, plus how many of
+  their bills are overdue.
+• The invoice list accepts ?status=paid|unpaid|overdue|partial|credit|cash.
+
+34 unit tests still pass.
+
+v1.24.0 (30 July 2026) — Design deck, session 3: Sales
+-----------------------------------------------------------------------
+
+Four kinds of document, one screen. Invoices, estimates and sale orders,
+credit notes and delivery notes now share the deck's layout and column set
+instead of each keeping its own.
+
+ABOVE THE LIST
+• Invoiced, with a bar splitting it into collected and outstanding, and the
+  percentage under it. Voided invoices are left out of every figure — they
+  were reversed, so counting them would overstate both sales and debt.
+• Received, and how many bills are settled in full.
+• Still owed, how many are open, and how many are over 90 days old. The last
+  is a count rather than an amount, because how old the oldest debts are is
+  the thing that matters and a total hides it.
+These describe the whole book, not the page on screen, so they do not move
+when you search or turn the page.
+
+Each tab brings its own panels. Estimates show what is quoted, what is still
+open, and what has been won. Credit notes show what has gone back and what
+share of everything invoiced that is. Delivery notes show what has been sent
+but not yet billed.
+
+THE LIST
+• Quick filters — All, Unpaid, Overdue, Credit — beside the title.
+• One search box and one date range, set once and kept while you page.
+• An invoice past its due date now reads "overdue" rather than "unpaid", and a
+  part-paid one reads "partial". The pill and the filter agree, because both
+  work it out the same way.
+• Voided rows are struck through and greyed.
+• Row actions moved into one ⋮ menu: view, edit, print, duplicate, WhatsApp,
+  and void. Edit and void are hidden when you do not have the permission.
+
+FIXED
+• The date filters used to be two loose boxes above the table with no way to
+  see at a glance whether a range was applied; the button now says the range
+  it is using.
+
+UNDER THE BONNET
+• New endpoint /sales/overview does the counting server-side across invoices,
+  estimates, credit notes and challans in one round trip.
+
+34 unit tests still pass.
+
+v1.23.0 (30 July 2026) — Design deck, session 2: Items
+-----------------------------------------------------------------------
+
+The first screen rebuilt to the deck. The layout is the design's; the work it
+does — the editor, adjust, repack, ledger, serials, labels, bulk activate — is
+the same machinery as before, reached from the places the design puts it.
+
+ABOVE THE LIST
+• Stock value at cost, with the product, category and dual-unit counts.
+• Running out: how many items are at or under their reorder level, and which.
+  An item with no reorder level set is never counted as running out.
+• Dead stock 60 days: what is still on the shelf with nothing sold off it in
+  two months, valued at cost. Click it for the ageing breakdown.
+These are counted across the whole catalogue on the server, not summed from
+whatever happens to be loaded, so they do not change when you search.
+
+THE ITEM ITSELF
+• Sale price, cost, margin and stock value across the top, each with the
+  detail under it — the per-kilo cost on a dual-unit item, the markup beside
+  the margin, and how many moved this month.
+• Stock is drawn rather than stated. A dual-unit item gets one block per whole
+  bag, the opened bag part-filled to the kilo, a bar underneath showing how
+  full the shelf is, and a red marker at the reorder level. Underneath: whole
+  bags, loose kilos, and what the loose stock is worth if sold by the kilo
+  rather than by the bag.
+• A single-unit item gets the same bar without the blocks.
+• Movements now carry a running balance, so each row says what was on the
+  shelf after it. The balance is worked back from what is there now.
+
+SERVICES
+Their own view: rate, cost, margin and what has been booked, with the booking
+list in place of stock movements. A service holds no stock, so nothing on the
+screen pretends it does.
+
+UNITS
+Which conversion pairs are in use, and how many items use each unit. The note
+beside the form says what the screen actually enforces: a unit is not a
+conversion on its own — an item is what links two of them.
+
+CATEGORIES
+Items, stock value, sold and margin per category. Each can be given a colour,
+which marks its row here. Categories that have never been given one get a
+stable colour from their name rather than being left blank. Deleting a
+category never deletes what was filed under it — the items keep their details
+and simply lose the grouping.
+
+FIXED
+• Bulk activate did nothing when opened from the Items menu — it was handed a
+  variable that does not exist in that scope, so it threw instead of opening.
+
+UNDER THE BONNET
+• Three new endpoints do the counting server-side: /items/overview,
+  /items/categories-summary and /items/units-summary.
+• Categories gained a colour column, and can now be renamed, recoloured and
+  deleted.
+• Item detail now returns how much sold this month, and — for a service — its
+  bookings.
+
+34 unit tests still pass.
+
+v1.22.0 (30 July 2026) — Design deck, session 1: the new shell
+-----------------------------------------------------------------------
+
+This is the first instalment of the design deck built for real. It is
+deliberately foundational: the shell and the palette, which every screen sits
+inside, before the screens themselves. Nothing was invented — every colour,
+size, corner and spacing below is copied from "POS Deck.dc.html".
+
+THE MENU
+• A rail that collapses to a 76px icon strip and opens to 248px with labels.
+  The toggle sits in the top bar and turns to show which way it will go.
+• Four groups separated by hairlines, in the deck's order: Dashboard, Till,
+  Sales, Parties, Invoice builder — then Items, Purchases, Stock take — then
+  Cash & bank, Accounting, Reports — then the extra features.
+• Settings and your own name sit at the foot, always in the same place.
+• Two screens are renamed to match the design: POS is now Till, and Money is
+  now Cash & bank.
+• Warranty and Shifts are not in the deck's menu. They are working screens, so
+  they stay in the extras group rather than becoming unreachable.
+
+COLOUR
+• One authoritative set of colours, light and dark, replacing the layers that
+  had built up. Dark mode is a full palette of its own, not a dimmed copy.
+• Every screen picked up the new colours at once, because the old colour names
+  now point at the new ones rather than each screen being edited by hand.
+• Four accents to pick from: blue, teal, violet and amber.
+• Corners are rounded again — 9px on top-bar controls, 11px on buttons and
+  menu rows, 14–16px on cards and dialogs. This reverses the squaring-off from
+  v1.19.0, because the deck rounds them.
+
+TOP BAR
+• Title and one line of explanation, in the deck's wording, on every screen.
+• Find anything, and New sale, on the right.
+• The breadcrumb back to Home added in v1.21.0 is kept, above the title.
+• Dark mode and About keep a home as small icon buttons — the deck sets the
+  theme from outside the app, and losing the switch would have been a loss.
+
+CONFIRMATIONS AND NOTICES
+• A new confirmation panel reads back what is about to happen — the fields,
+  the rows, the amounts — instead of asking a yes/no question in prose.
+  Destructive ones turn red and say plainly that it cannot be undone.
+• Notices are now one dark bar at the foot of the window. Undo still rides
+  inside it.
+
+ON A SMALLER SCREEN
+• The deck is drawn at a fixed 1920×1080. This build is fluid instead: under
+  1180px the menu drops to icons by itself, and under 720px it slides over the
+  page rather than squeezing it.
+
+STILL TO COME
+The screens themselves — till, items, sales, purchases, money, accounting,
+reports, stock take and settings — plus the parts of the deck that need new
+tables behind them: the permission matrix, print templates, locations, the
+online store and the URA screens.
+
+Backend untouched: 34 unit tests still pass.
+
+v1.19.0 (27 July 2026) — Session 1 of the redesign: the blocking bugs
+-----------------------------------------------------------------------
+
+FIXED: ACCOUNTING, SHIFTS AND MONEY WOULD NOT OPEN
+This was the "Failed to fetch dynamically imported module" error. Those screens
+load on demand, and after an update the already-open app was still asking for
+the previous build's filenames, which no longer exist. Fixed at both ends:
+  · The server no longer lets the browser cache the page shell, so a rebuild is
+    picked up immediately. Hashed files are still cached hard, so nothing gets
+    slower.
+  · If a screen still fails to load, it retries once and then reloads itself
+    automatically — once only, never in a loop.
+If you hit this on an older build, one refresh clears it.
+
+LOOK AND FEEL — THE REQUESTED CHANGES
+• Corners squared off across the app, so panels read as distinct from the page.
+• The page background is darker, so white cards and buttons stand off it.
+• Every switch, checkbox, radio, link and text highlight is now the same blue.
+• Buttons are narrower and less blocky — 36px standard, 38px on form footers.
+• Sidebar: the accent bar is gone, hover is a soft wash instead of a hard
+  block, and the active item is a calm blue tint.
+• Spacing put on a proper scale rather than ad-hoc numbers, so pages breathe
+  consistently.
+
+LOADING
+• Every screen now shows a page-shaped skeleton and a thin top progress bar
+  while it loads, instead of appearing to hang.
+
+DASHBOARD
+• The date filter is the same picker as Reports — Today, Last 7 days, Last 30
+  days, This month, Last month, This year, or a custom span.
+• KPI cards carry micro-charts: a 14-day bar strip on today's sales and a trend
+  line on the period figure. They read from the same series as the chart below,
+  so a card and the graph can never disagree.
+
+Backend untouched: 226 audit checks and 34 unit tests still pass.
+
+v1.18.0 (27 July 2026) — Dark mode rebuilt, bigger controls
+-------------------------------------------------------------
+Taking the parts of the SACCO Manager build that were working better.
+
+DARK MODE — THE REAL FIX
+• There were three separate dark-theme definitions disagreeing with each
+  other, and none of the tokens added in the last design pass had dark values
+  at all. So on a dark background, chips kept a light grey backing, borders
+  kept their light colour, and shadows tuned for white were invisible. That
+  is why dark mode looked wrong rather than merely dim.
+• There is now one authoritative dark palette covering every token:
+  – Three surface levels, each lighter than the last, so a card on a page on
+    a background reads as stacked instead of flat.
+  – Borders lift rather than darken; a darker line on a dark surface vanishes.
+  – Status colours lighten and their backings turn translucent, so a chip
+    tints the surface under it instead of punching a hole in it.
+  – Shadows carry more weight, since a light-tuned shadow cannot be seen.
+• Inputs, menus, popovers, tooltips, table headers, the totals panel and the
+  import area all follow the theme now.
+• Invoice previews stay on white paper in both themes — a printed invoice is
+  always on white and the preview should not pretend otherwise.
+
+BIGGER, EASIER CONTROLS
+• Buttons went from 36px to 40px tall, and the buttons that commit or cancel
+  a form — the ones people aim at in a hurry — are 44px.
+• Inputs and sidebar rows are 40px; icon buttons 36px.
+• Sidebar rows have more breathing room, with clearer hover and active states.
+
+CARDS AND HOVER
+• Clickable cards lift slightly and deepen their shadow on hover, so what can
+  be clicked is obvious before you click it.
+• One thin scrollbar style across the app, with its own dark variant.
+
+Backend untouched: 226 audit checks and 34 unit tests still pass. Both static
+frontend checks — missing imports and unknown props — report clean.
+
+v1.17.0 (27 July 2026) — Motion (design system pass 2)
+--------------------------------------------------------
+Movement added where it tells you something, and nowhere else. Only opacity
+and transform are animated, so a long table still scrolls smoothly on a cheap
+till PC, and every effect collapses to nothing if the machine is set to
+reduce motion.
+
+TWO MORE CRASHES FOUND AND FIXED
+• The Items list used its loading skeleton without importing it — the list
+  would have thrown while loading. This was pre-existing.
+• The Dashboard would have thrown once its figures were animated, because it
+  does not import from the shared component file at all.
+Both were caught by a new check that scans every page for components used but
+never imported, which now reports clean.
+
+WHAT MOVES NOW
+• Headline figures count up to their value and land exactly on it — a money
+  total never stops a shilling short from rounding.
+• Table rows arrive in quick succession rather than all at once, so data reads
+  as landing rather than the page blinking. Capped so long tables have no slow
+  tail, and skipped entirely for skeleton rows.
+• Rows the system changed on your behalf glow briefly, so automatic updates
+  are visible instead of silent.
+• Modals scale in with a slight overshoot, drawers slide, popovers open from
+  the corner they belong to, and backdrops blur in.
+• Summary chips lift on hover; the sidebar's active marker grows into place
+  instead of jumping.
+• Buttons press in slightly. A new action button carries its own state —
+  spinner while working, a tick that draws itself when done — so confirmation
+  appears where you are already looking.
+• Refused input shakes as well as turning red, since colour alone is easy to
+  miss and no use to a colour-blind user.
+• Empty states ease in so they read as information rather than an error.
+• Charts draw themselves in; bars grow from their baseline in sequence.
+• Progress bars for longer jobs, determinate or indeterminate.
+
+Backend untouched: 226 audit checks and 34 unit tests still pass.
+
+v1.16.0 (27 July 2026) — Interface overhaul (design system pass 1)
+--------------------------------------------------------------------
+A design-system layer rather than a page-by-page repaint, so every screen in
+the app picks the changes up at once.
+
+THREE REAL BUGS FOUND AND FIXED
+• The row (⋮) menu on Recurring, Installments, Manufacturing, Offers, Loyalty
+  and Warranty would crash when opened — those pages passed their actions
+  under a different name than the component expected. The menu component now
+  accepts either, so all six work.
+• Empty states on those same pages were dropping their explanatory line for
+  the same reason, and three empty states on the Dashboard were rendering with
+  no text at all. Both fixed.
+• Confirmation dialogs were showing their heading and buttons but silently
+  dropping the sentence explaining what was about to happen.
+
+LOOK AND FEEL
+• Softer, layered shadows. Tinted near-black at low opacity with a tighter
+  blur reads far gentler than pure black at high opacity.
+• One focus ring across every control, shown for keyboard users only.
+• Nothing clickable is smaller than 36px now, so buttons are easier to hit —
+  on a touchscreen till especially.
+• A radius scale so nested corners stay concentric instead of drifting.
+• Motion is short and eased, and respects the "reduce motion" setting.
+
+NAVIGATION
+• The sidebar's one long list of fifteen items is now five short groups —
+  Sell, Stock, Money, Grow, Insights — separated by dividers, with the active
+  item marked by a bar rather than colour alone.
+
+TABLES
+• Headers stay put while you scroll a long list.
+• Numbers are right-aligned with matched digit widths so columns can be
+  scanned down.
+• Statuses render as coloured chips, and every screen now agrees on what each
+  colour means.
+• Retired and switched-off rows are dimmed so live data stands out.
+• Row (⋮) menus appear on hover or keyboard focus instead of sitting there
+  permanently — and stay visible on touch devices, where there is no hover.
+
+THINGS YOU COULD NOT SEE BEFORE
+• Tooltips on icon-only controls.
+• Loading skeletons shaped like the content they stand in for, with numeric
+  columns skeletoned as right-aligned figures.
+• Proper empty and error states with an icon, a heading and a way forward.
+• Copy-on-hover for cell values.
+
+DATE RANGES
+• Reports now use a proper range picker: Today, Last 7 days, Last 30 days,
+  This month, Last month and This year one click away, with a two-ended
+  calendar when a specific span is genuinely needed.
+
+Backend untouched: 226 audit checks and 34 unit tests all still pass.
+
+v1.15.0 (26 July 2026) — Warranty cover & claims
+--------------------------------------------------
+The last of the new modules. Switch on "Warranty cover & claims" in
+Settings → Modules, then set a warranty period in months on any item.
+
+• Selling a covered item registers the cover by itself — tied to the customer,
+  the invoice and the date, running for the item's own period. Cover is
+  created inside the sale's transaction, so a refused invoice never leaves
+  cover behind.
+• Serialised items get one record per unit, so an individual radio or phone
+  can be traced rather than a whole line of them.
+• Serial lookup sits at the top of the screen, because that is how this
+  actually gets used: a customer walks in holding the thing and you need to
+  know in seconds whether it is still covered, and until when.
+• Cover shows as in cover, ending soon (within a month), expired or void, so
+  a unit about to run out is visible before the customer finds out the hard
+  way.
+• Claims record the fault, and close as repaired, replaced, refunded or
+  rejected with what settling them cost. A claim outside the cover period is
+  refused and the message says when cover ran out, rather than quietly
+  accepting a promise the shop cannot keep.
+• Cover can be voided with a reason, and the record stays so the history is
+  still explainable. Nothing can be claimed against voided cover.
+• Cover for goods sold before the module was switched on can be registered by
+  hand.
+
+Cover periods handle short months properly: something sold on 31 January with
+one month of cover runs to 28 February (29th in a leap year).
+
+The audit suite now runs 226 checks with none failing.
+
+v1.14.0 (26 July 2026) — Loyalty points
+-----------------------------------------
+Switch on "Client loyalty points" in Settings → Modules for a Loyalty page,
+and set the scheme up under Settings → Loyalty.
+
+• Customers earn points automatically when a sale is billed to them — one
+  point per however many shillings you choose. Walk-in "Cash Sale" business
+  earns nothing, since there is nobody to credit.
+• Points are awarded inside the sale's own transaction, so an invoice that
+  fails can never leave points behind.
+• Every movement is a row in a ledger — earned, redeemed, corrected, expired —
+  and a balance is simply their sum. Nothing caches a running total, so a
+  balance can always be explained by the movements behind it, right back to
+  the sale that caused it.
+• Redeeming gives you the shilling value to take off the bill as an ordinary
+  discount, so the money side stays in the invoice where the books can see it.
+  A minimum redemption keeps small balances from being fiddly.
+• Corrections need a reason, and the reason stays in the customer's history.
+• Points can be set to lapse after a number of months. The expiry sweep treats
+  older points as spent first, so a customer who keeps earning and redeeming
+  never loses points they have effectively already used.
+• The members list shows what the scheme owes customers in shillings — useful
+  to know before running a promotion on top of it.
+
+The audit suite now runs 207 checks with none failing.
+
+v1.13.0 (26 July 2026) — Offers & promotions
+----------------------------------------------
+Switch on "Offers & promotions" in Settings → Modules for an Offers page.
+
+• Three kinds of deal: a percentage off, a fixed amount off each unit, or buy
+  X get Y free. Each can point at one item, a whole category, any item, or the
+  whole bill.
+• Conditions: a minimum quantity, a minimum amount, and a date range — so a
+  festive-season deal switches itself on and off.
+• Offers become an ordinary line discount at billing rather than a separate
+  kind of money off, so tax, posting, margin and every report keep working
+  exactly as before. There is no second discount system to fall out of step.
+• When two item offers could apply to the same line, only the better one is
+  used — promotions never quietly stack into a loss. A whole-bill offer then
+  applies to what is left after the item deals.
+• "Apply offers" on the invoice screen fills the discounts your running
+  promotions give, and the cashier can still override any of them.
+• "Test a basket" lets you try a pretend basket against the live rules before
+  a deal goes anywhere near a customer.
+• Deleting an offer never changes bills already raised.
+
+The audit suite now runs 194 checks with none failing.
+
+v1.12.0 (26 July 2026) — Manufacturing
+----------------------------------------
+Switch on "Manufacturing" in Settings → Modules for recipes and production runs.
+
+• A recipe (bill of materials) says what goes into one batch: the components
+  and their quantities, how many finished units a batch yields, and the labour
+  and overhead a batch costs. Recipes can be retired and put back in use.
+• Before producing, the costing panel shows exactly what the run will consume,
+  what each component is worth, what the batch costs in total, and what each
+  finished unit will therefore cost. No surprises after the fact.
+• Producing takes the components off the shelf and puts the finished goods on
+  it carrying their real cost — so the margin on what you make is as honest as
+  the margin on what you buy.
+• Short of stock, production is refused and the message names exactly what is
+  missing and by how much, rather than driving stock negative.
+• Every run keeps a record of what it ate and at what cost, so a finished
+  item's price can always be explained months later.
+• Components turning into product is value moving within inventory, so it
+  needs no journal entry. Labour and overhead are money genuinely spent, and
+  those do raise the value of what is now on the shelf — the books balance
+  either way.
+• Sensible refusals: a recipe cannot contain the item it produces, the same
+  component cannot be listed twice, and a recipe already used in production is
+  retired rather than deleted so past runs still make sense.
+
+The audit suite now runs 179 checks with none failing.
+
+v1.11.0 (26 July 2026) — Installments, and a schedule-drift fix
+-----------------------------------------------------------------
+Switch on "Installments management" in Settings → Modules for an Installments
+page that turns a credit invoice into an agreed payment timetable.
+
+• Pick an unpaid credit invoice, set an optional down payment, choose how many
+  instalments and how often, and see the exact timetable before you commit.
+  Any rounding lands on the last instalment, so the plan adds up to the
+  invoice to the shilling.
+• The plan is a promise, not a second set of books. Whether an instalment is
+  settled is worked out from the invoice's own payments, oldest first — so
+  recording a payment the ordinary way moves the plan on by itself. A plan can
+  never disagree with the accounts, because it never keeps its own copy.
+• Tabs for Active, In arrears, Due & overdue, and Finished, with a summary of
+  what is still to collect, how much is behind, and how many customers are
+  behind. The Due & overdue list shows the customer's phone number, ready for
+  chasing.
+• Cancelling or deleting a plan never touches the invoice or its payments —
+  the customer simply owes the balance without a timetable.
+
+SCHEDULE-DRIFT FIX (also affects recurring documents from v1.10.0)
+• A monthly schedule agreed on the 31st used to clamp to 28 February and then
+  stay on the 28th for good, quietly walking away from the agreed date.
+  It now treats a short month as an exception: 31 Jan → 28 Feb → 31 Mar →
+  30 Apr → 31 May. The v1.10.0 notes described this behaviour, but the code
+  did not do it; both recurring documents and installments do now.
+
+The audit suite covers all of it — 163 checks, none failing.
+
+v1.10.0 (26 July 2026) — Recurring sales & purchases, for real
+----------------------------------------------------------------
+The first of the new modules stops being a switch and starts doing work.
+Switch on "Recurring sales" and/or "Recurring purchases" in Settings → Modules
+and a Recurring page appears in the sidebar.
+
+• A schedule is a saved set of items plus a repeat rule: every N days, weeks,
+  months or years, starting on a date you choose, ending never / after a set
+  number of documents / on a date.
+• Run one schedule from its ⋯ menu, or "Run N due" to clear everything at once.
+• Documents are created through the very same engine as hand-keyed ones, so
+  tax rules, stock movements, costing and the GL are identical. Anything the
+  system would normally refuse — credit limit, below cost, out of stock, an
+  inactive item — is refused here too, recorded against the schedule with the
+  reason, and the run stops there so you can fix it rather than silently
+  skipping a month.
+• A back-dated schedule catches up properly: one document per missed period,
+  not a single lumped one, so the books match what was actually agreed.
+• Month-ends behave. A schedule started on the 31st fires on the 28th in
+  February (29th in a leap year) and returns to the 31st afterwards, instead
+  of drifting or skipping the month.
+• Pause and resume without losing the schedule or its history. Resuming an old
+  schedule picks up from today rather than firing every missed period at once.
+• Each schedule keeps a full history: which document each run produced, or the
+  exact reason it could not.
+• Deleting a schedule never touches documents it already created.
+
+Under the hood: the sale and purchase creation handlers are now shared with the
+recurring runner rather than duplicated, so the two can never drift apart.
+The audit suite covers all of this — 147 checks, none failing.
+
+v1.9.0 (26 July 2026) — Zoho Books batch C: modules & the Custom Invoice Builder
+---------------------------------------------------------------------------------
+• New Settings → Modules page. Account information (You sell / Invoicing method
+  / Client type) plus switches for every part of the system: Sales, Point of
+  Sale, Sales targets & commissions, Installments management, Offers &
+  promotions, Insurance, Client loyalty points, Recurring sales, Inventory,
+  Manufacturing, Purchase cycle, Recurring purchases, Accounting, Expenses,
+  Shifts and Stock takes.
+  Switching a module off hides its screen from the sidebar immediately; the
+  data it owns is left untouched, so switching it back on loses nothing.
+  The six brand-new modules ship switched off — they are placeholders for now
+  and the screens behind them arrive in a later release.
+• Custom Invoice Builder (Settings → Print → Custom Invoice Builder).
+  Twelve sections down the left — Template Details, Title, Logo, Business info,
+  Client info, Item Columns, Custom Fields, Labels, Header, Footer, Style and
+  Notes — an editor in the middle, and a live preview on the right.
+  Click any placeholder to drop it in at the cursor: business and client
+  details, invoice numbers and dates, totals, sales rep and more.
+  Choose which item columns print, rename any label on the page (handy for
+  another language), and set the accent colour, font size, grid lines and
+  table header fill.
+  The preview is rendered by the same code that prints the real invoice, so
+  what you design is exactly what comes out of the printer.
+  A line whose placeholders are all empty is dropped rather than printed, so a
+  customer with no TIN doesn't get a stranded "TIN" label on their invoice.
+• Audit suite repaired: it had been failing every sale and purchase since the
+  sales-rep requirement landed, which masked most of its coverage. It now runs
+  133 checks with none failing (it was reaching only 28 before).
+
+v1.8.0 (26 July 2026) — Zoho Books batch B: payments, imports & the AR/AP book
+-------------------------------------------------------------------------------
+• Payments now open full screen, with the fields a real settlement needs:
+  amount received, bank charges, "tax deducted?" (withholding), payment date,
+  payment mode, date received, Deposit To / Paid From account, reference and
+  notes — plus a live footer showing what the payment actually settles.
+• Withholding tax is handled properly: it still settles the invoice, but it
+  never reaches the bank. On money in it lands in Tax Recoverable as a URA
+  credit; on money out it lands in Taxes Payable as tax you owe. Bank charges
+  post to Indirect Expenses, so the amount banked is amount − charges.
+• Save as Draft parks a payment without allocating or posting anything.
+  Confirm it later from the payments list (⋯ → Confirm draft) and it allocates
+  oldest-first and writes the GL entry then.
+• Item import is now a 3-step wizard — Configure → Map Fields → Preview.
+  Drag and drop or choose a file, pick Skip Duplicates or Overwrite Items,
+  check the auto-detected column mapping, preview the first ten rows, then
+  import. Item Code / SKU can now be imported and is used to match duplicates.
+  A sample CSV is downloadable from step 1.
+• Twelve new reports in two new groups:
+    Receivables — AR Aging Summary, AR Aging Details, Invoice Details,
+                  Quote Details, Customer Balance Summary,
+                  Receivable Summary, Receivable Details
+    Payables    — AP Aging Summary, AP Aging Details,
+                  Supplier Balance Summary, Payable Summary, Payable Details
+  Aging buckets are Current / 1-15 / 16-30 / 31-60 / 61-90 / Over 90 days, and
+  these reports take a single "As of" date instead of a range.
+
+v1.7.0 (26 July 2026) — Zoho Books batch A: cleaner forms, items menu & preferences
+-----------------------------------------------------------------------------------
+• Invoice & purchase forms redesigned around a Zoho-style "Item Table" card:
+  bordered grid with Item details / Quantity / Unit / Rate / Discount % / Amount,
+  "+ Add New Row" and "+ Add Items in Bulk" buttons, Customer Notes on the left
+  and a boxed totals panel (Sub Total → Total) on the right.
+• Add Items in Bulk — tick many items in one searchable list, set quantities,
+  and drop them all onto the document at once (sales, purchases & debit notes).
+• Items screen toolbar reworked: blue ＋ (new item) plus a ⋯ menu with
+  Sort by ▸ (name / price / stock), Import ▸, Export ▸ (CSV / print list),
+  Preferences, Price tags, Refresh List and Reset Column Width.
+• Items → Preferences (Zoho layout): quantity decimal places, default
+  inventory valuation method, allow duplicate item names, enhanced item
+  search (keywords in any order), enable/disable price lists, and whether
+  new products track inventory by default. Also editable in Settings → Item.
+• Duplicate item names are now blocked unless the preference allows them —
+  and creating items is safe either way (new-item id no longer looked up by name).
+• Quantity inputs follow your decimal-places preference.
+
+v1.6.0 (25 July 2026) — Shifts, full-screen forms, unit switching (batch 2 of 2)
+--------------------------------------------------------------------------------
+
+Shifts (new)
+- A new Shifts screen in the menu. A cashier opens a shift with the cash they're
+  starting with (the float), and closes it after counting the drawer. The app
+  works out what SHOULD be there — float + cash sales − cash paid out — and
+  shows whether you're over or short, to the shilling.
+- The live shift shows expected cash as it builds through the day, before you
+  even count.
+- Shift history records who, opening/closing times, how long it ran, expected
+  vs counted, the variance, and who closed it. A manager can close a shift a
+  cashier left open.
+- "Block sales unless a shift is open" (Transaction settings, from batch 1) now
+  works — turn it on for strict till discipline. Off by default.
+- New report: User time on shift — hours worked, shifts, average length and
+  total cash variance per person. This is the "time spent by a user" you asked
+  for.
+
+Change unit of measure on invoices and purchases
+- Item lines on the invoice and purchase screens now have a unit switch (⇄),
+  the same one the POS has. Sell or buy the same item in bags or kilos without
+  creating two products.
+- Buying in the smaller unit is handled correctly: 100 KG of a 50 KG bag lands
+  as 2 bags in stock at the right cost per bag — verified so the stock value is
+  identical whichever unit you type.
+
+Full-screen entry
+- The invoice and purchase screens now fill the whole window instead of opening
+  as a floating box, with the Save/Cancel bar fixed at the bottom. More room for
+  wide item lists.
+
+New receipt design
+- Added the "Semantic" receipt layout from the sample you sent: a
+  QTY / ITEM DESC. / AMOUNT table with SUB TOTAL, an optional Catering Levy line,
+  Tax, GRAND TOTAL, PAID and CHANGE, and "Served by" at the foot.
+- Choose it under Settings > Print (thermal layouts). The levy percentage is a
+  setting — set it to 0 to hide the line.
+
+
+v1.5.0 (24 July 2026) — Sales rep & staff reports (batch 1 of 2)
+---------------------------------------------------------------
+
+Sales rep on every transaction
+- You can now choose WHO a sale is credited to, separately from who is logged
+  in. A cashier at the till can attribute a sale to the waiter or floor staff
+  who actually made it. The person who typed it is still recorded underneath for
+  the audit trail.
+- The rep picker appears on POS (in the pay screen), the invoice screen and the
+  purchase screen, and defaults to the logged-in user.
+- Settings > Transaction > "Sales rep is required on every sale" (on by default)
+  makes it mandatory. Turn it off if you don't need it.
+- The receipt now prints "Served by: <rep>" in the footer, matching the format
+  you asked for. If a different person entered the sale, that's noted too.
+- Existing sales are automatically credited to whoever entered them, so your
+  history isn't suddenly full of "unattributed" sales.
+
+New reports
+- Sale summary by user — items sold, total sales, tax, running (unpaid),
+  invoices, discounts and commission per rep, matching the layout you sent.
+  Commission is optional (pass a % ); a status shows who's still owing.
+- Sale summary by category & item — every item under its category with barcode,
+  quantity, total, tax and running balance.
+- User sales & profit — revenue, cost, profit, margin % and average bill per
+  rep over any date range. Profit uses the corrected base-unit costing, so it's
+  finally accurate for items sold in a secondary unit.
+- User sales by hour — when each rep sells through the day.
+
+Also added (groundwork for batch 2)
+- A "Block sales unless a shift is open" setting is in place but inactive until
+  the Shifts feature arrives in the next batch — it does nothing yet.
+
+Still coming in batch 2: full-screen invoice/purchase screens (not pop-ups),
+changing unit of measure on invoice and purchase lines, the new POS receipt
+template, and the Shifts feature (open/close, expected vs counted cash, and
+time-per-user reporting).
+
+
+v1.4.0 (24 July 2026)
+---------------------
+
+Security & safety hardening (from the engineering review)
+- The server now REFUSES TO START in production without a real JWT_SECRET.
+  Before, it fell back to a built-in key, which meant anyone who had seen the
+  code could forge an admin login on a hosted server. In development it still
+  runs, with a warning. Set one before hosting:  JWT_SECRET=<long random value>
+- Login is now rate-limited. Too many failed attempts from one machine, or
+  against one username, are temporarily blocked — this stops password guessing.
+  A correct password clears the count, so a staff member who mistypes is never
+  locked out for it.
+- Server errors no longer leak internal details (table and column names) to the
+  browser. Each error gets a short reference code instead; the full detail is in
+  the server log. Quote the code when reporting a problem.
+
+Self-testing — the calculations now check themselves
+- Added an automatic self-check of the money maths: tax, unit conversion and
+  stock costing. It runs when the app starts and every one of this month's bugs
+  — the 340,000 phantom loss, disabled taxes still charging, the dual-unit
+  refund — is now covered by a test that would have caught it.
+- If the self-check ever fails, the app refuses to start rather than take sales
+  with maths that might be wrong. 32 checks, run in under a second, no internet
+  needed.
+- For developers: `npm test` in the backend folder, or `node test/run.js`.
+
+
+v1.3.3 (24 July 2026)
+---------------------
+
+Print layouts — you can now see what you're choosing
+- FIXED: the six layout cards all drew the same grey bars, so every layout
+  looked identical and there was no way to tell them apart before picking one.
+  Each card now shows a small drawing of that layout's real header, rules and
+  table — the orange Modern banner, the black Tax Invoice block, the double rule
+  on Classic, and so on.
+- The large preview beside them always did update; it was the cards that didn't.
+
+Default printer
+- NEW: Settings > Print now has a default printer for A4 documents and another
+  for thermal receipts, plus an option to print straight away with no dialog —
+  what a busy till wants.
+- Please read this part, it decides whether the setting does anything for you:
+  a web browser does NOT allow a page to choose the printer. window.print()
+  hands over to the browser's own dialog and no website may override it. That is
+  a browser security rule, not something the app can get around.
+  So: in the DESKTOP app the setting is real — receipts go straight to the
+  printer you pick. In a BROWSER (how you're running it now, at
+  localhost:3000) your choice is saved and the browser dialog still appears.
+  The setting explains this on screen rather than looking broken.
+- If a chosen printer is off or unplugged, the receipt falls back to the normal
+  dialog instead of vanishing.
+- The desktop shell gained the plumbing for this: it can now list the real
+  printers on the machine and print directly to one.
+
+
+v1.3.2 (24 July 2026)
+---------------------
+
+Taxes — switched off now means switched off
+- FIXED: switching a tax rule off in Settings changed nothing. The screens read
+  every rule from the server, including the ones you had disabled, so the till
+  kept charging a tax you had turned off.
+  Worse, the server DID respect it when saving. So the screen quoted the
+  customer one total and the invoice recorded another. Check any receipts around
+  the time you switched a rule off — the saved invoice is the correct one.
+- FIXED: credit notes, estimates and purchases ignored the "Apply invoice taxes"
+  switch completely — turning taxes off left them still showing tax on screen,
+  while the saved document had none.
+- FIXED: the per-sale-type switches (POS / cash / credit sales) were only
+  honoured on the POS screen. Sales raised from Invoices, and every other
+  document, ignored them.
+- All six screens that price a document now share one rule, which mirrors the
+  server exactly. Verified across every on/off combination.
+
+Menus
+- FIXED: the three-dot menu on an item's transaction history was cut off at the
+  edge of the panel, so the options on the lower rows couldn't be reached. It
+  now opens over the page and flips upward near the bottom of the window, like
+  the three-dot menus everywhere else.
+
+
+v1.3.1 (24 July 2026)
+---------------------
+
+Dual-unit items — profit, refunds and voids were all miscounted
+- FIXED: selling an item in its secondary unit reported a huge loss. Cement at
+  1 BAG = 50 KG, costing 35,000 a bag: selling 10 KG at 1,000 each showed a
+  340,000 loss instead of a profit.
+  Cause: the sale line stores the quantity in the unit it was SOLD in (10 KG),
+  but the item's cost is held per BASE unit (35,000 per BAG). Every profit
+  report multiplied one by the other, costing 10 KG as 10 whole bags —
+  10 x 35,000 = 350,000 against 10,000 of revenue.
+  Affected: Bill-wise profit, Profit & margin per item, Sales by items, and the
+  hourly sales profit column.
+  IMPORTANT: your accounts were never wrong. The stock ledger always converted
+  correctly, so cost of goods sold in the general ledger, stock on hand and the
+  balance sheet were right the whole time. Only the four profit reports lied.
+- FIXED: refunding an item sold in its secondary unit put the wrong amount back
+  on the shelf. Refunding 10 KG of a 50 KG bag returned 10 whole BAGS — fifty
+  times too much stock, which then fed the stock valuation and reorder reports.
+- FIXED: voiding such a sale had the same fault, restoring 10 BAGS for 10 KG.
+- Sale lines now record how many base units left the shelf, worked out once when
+  the sale is saved instead of being re-guessed by each report. Existing
+  invoices are corrected automatically the first time the app starts, so past
+  reports fix themselves — no re-entry needed.
+- All three paths now use one shared conversion, so they cannot drift apart again.
+
+Stock take
+- FIXED: Stock take was missing from the side menu, so there was no way to open
+  it. The page, its icon and its permissions all existed already — only the menu
+  entry was missing. It now sits under Items.
+
+
+v1.3.0 (24 July 2026)
+---------------------
+
+POS — the price field no longer runs away
+- FIXED: editing an item's price gave a different number, which then multiplied
+  itself on every further edit. Typing 900 on a line switched to its secondary
+  unit produced 45,000, then 2,250,000, then 112,500,000.
+  Cause: the price cell displayed a formatted figure ("42,000") and parsed that
+  same string back on every keystroke, AND multiplied it by the unit conversion
+  before writing it into the field it was reading from. Each edit re-multiplied
+  the previous result.
+  The price you type is now stored exactly as typed, in the unit shown next to
+  it. Verified: 900 stays 900 no matter how many times it is entered.
+- Price and quantity cells now hold your keystrokes while you type and commit on
+  Tab, Enter or clicking away. Esc cancels the edit.
+- FIXED: switching a line between units (e.g. BAG <-> KG) rounded quantities to
+  whole numbers and could restore a stale price. A price typed while in the
+  secondary unit is now carried back correctly when you switch out of it.
+- FIXED: "below cost" warned wrongly on secondary units — it compared a per-KG
+  price against a per-BAG cost. It now compares like for like and names the unit.
+- FIXED: items with a fixed price could not be sold in their secondary unit at
+  all; the configured secondary price is now accepted.
+
+Setup wizard — what you type is now what you get
+- FIXED: the tax step saved a flag and nothing else. Choosing "Add VAT (18%)" or
+  "Withholding tax + VAT" changed nothing at the till, because no tax rules were
+  ever created. Your choice is now turned into real, editable rules under
+  Settings > Taxes, replacing whatever the install shipped with.
+- FIXED: the staff login was created with no role attached, so the new person
+  could sign in but had no permissions and was thrown straight back to the login
+  screen. Cashier and Manager roles are now created with proper permission sets,
+  and the server refuses to create a login with no role at all.
+- FIXED: only the item rows survived a refresh. The whole wizard — business
+  details, tax choice, items and staff — is now kept, so a reload or power cut
+  part-way through costs you nothing.
+- Each step now reads back what the server actually stored instead of assuming
+  success, and says so plainly when something did not save.
+- Opening stock is saved with the item in one transaction rather than a second
+  call that could fail on its own and leave the item with no stock.
+
+Layout — one heading, one scrollbar, no dead space
+- FIXED: "Dashboard" appeared twice. The page was rendering its own header
+  inside the one the app already provides. The title now appears once, in the
+  top bar, with today's date beneath it.
+- FIXED: the wide empty strip between the menu and the content. The Dashboard
+  nested a second content area inside the first, so page padding was applied
+  twice.
+- FIXED: two vertical scrollbars. The side menu had no scrolling of its own, so
+  once it grew taller than the window it pushed the whole page past full height
+  and the browser added a second bar. The window is now fixed and each column
+  scrolls inside itself.
+
+Side menu — matching the SACCO layout
+- Users, Settings, Utilities and Sign out are now behind the account button at
+  the foot of the menu, which also holds Collapse menu.
+- Light/dark switch moved next to the business name, as a round icon button.
+- Active item, spacing between buttons, and the logo + business name sizing all
+  follow the reference design.
+- The signed-in person's name and role now show on the account button.
+
+Typography
+- One typeface across the whole system. It was mixing three: a condensed face
+  for headings, buttons and menu items, a second for body text and a third for
+  numbers. Money keeps aligned figures so columns still line up digit for digit.
+
+Reports — rebuilt
+- Search across all 45 reports; press "/" anywhere on the page to jump to it,
+  Enter opens the first match.
+- Favourites: star any report to pin it to the top. Remembered between sessions.
+- Recently opened row, so the four you actually use are one click away.
+- Colour-coded groups (Sales, Purchase, Money, Stock, Tax & books) with filter
+  chips and counts, an icon per group, and an accent edge on every card.
+- Report pages now carry the group colour, a breadcrumb and a favourite toggle.
+- Printing a report prints the report, not the menus around it.
+
+Demo data
+- A fresh install no longer creates any: no sample items, no sample customers,
+  no pre-loaded tax rules, and the business is unnamed until the wizard asks.
+  Sample data is still available on request with:  node seed.js --demo
+- NEW: clean-demo.js removes sample data from a database that already has it.
+
+      node backend/clean-demo.js              show what would go, change nothing
+      node backend/clean-demo.js --apply      remove it
+      node backend/clean-demo.js --apply --demo-user   also drop the sales login
+
+  It backs the database up first, and refuses to delete anything referenced by a
+  real transaction — it reports those instead. Deleting an item that has been
+  sold would leave invoices pointing at nothing and unbalance the ledger.
+
+
+GENIUS POS — WHAT'S NEW
+================================
+
+v1.19.0 (27 July 2026) — Session 1 of the redesign: the blocking bugs
+-----------------------------------------------------------------------
+
+FIXED: ACCOUNTING, SHIFTS AND MONEY WOULD NOT OPEN
+This was the "Failed to fetch dynamically imported module" error. Those screens
+load on demand, and after an update the already-open app was still asking for
+the previous build's filenames, which no longer exist. Fixed at both ends:
+  · The server no longer lets the browser cache the page shell, so a rebuild is
+    picked up immediately. Hashed files are still cached hard, so nothing gets
+    slower.
+  · If a screen still fails to load, it retries once and then reloads itself
+    automatically — once only, never in a loop.
+If you hit this on an older build, one refresh clears it.
+
+LOOK AND FEEL — THE REQUESTED CHANGES
+• Corners squared off across the app, so panels read as distinct from the page.
+• The page background is darker, so white cards and buttons stand off it.
+• Every switch, checkbox, radio, link and text highlight is now the same blue.
+• Buttons are narrower and less blocky — 36px standard, 38px on form footers.
+• Sidebar: the accent bar is gone, hover is a soft wash instead of a hard
+  block, and the active item is a calm blue tint.
+• Spacing put on a proper scale rather than ad-hoc numbers, so pages breathe
+  consistently.
+
+LOADING
+• Every screen now shows a page-shaped skeleton and a thin top progress bar
+  while it loads, instead of appearing to hang.
+
+DASHBOARD
+• The date filter is the same picker as Reports — Today, Last 7 days, Last 30
+  days, This month, Last month, This year, or a custom span.
+• KPI cards carry micro-charts: a 14-day bar strip on today's sales and a trend
+  line on the period figure. They read from the same series as the chart below,
+  so a card and the graph can never disagree.
+
+Backend untouched: 226 audit checks and 34 unit tests still pass.
+
+v1.18.0 (27 July 2026) — Dark mode rebuilt, bigger controls
+-------------------------------------------------------------
+Taking the parts of the SACCO Manager build that were working better.
+
+DARK MODE — THE REAL FIX
+• There were three separate dark-theme definitions disagreeing with each
+  other, and none of the tokens added in the last design pass had dark values
+  at all. So on a dark background, chips kept a light grey backing, borders
+  kept their light colour, and shadows tuned for white were invisible. That
+  is why dark mode looked wrong rather than merely dim.
+• There is now one authoritative dark palette covering every token:
+  – Three surface levels, each lighter than the last, so a card on a page on
+    a background reads as stacked instead of flat.
+  – Borders lift rather than darken; a darker line on a dark surface vanishes.
+  – Status colours lighten and their backings turn translucent, so a chip
+    tints the surface under it instead of punching a hole in it.
+  – Shadows carry more weight, since a light-tuned shadow cannot be seen.
+• Inputs, menus, popovers, tooltips, table headers, the totals panel and the
+  import area all follow the theme now.
+• Invoice previews stay on white paper in both themes — a printed invoice is
+  always on white and the preview should not pretend otherwise.
+
+BIGGER, EASIER CONTROLS
+• Buttons went from 36px to 40px tall, and the buttons that commit or cancel
+  a form — the ones people aim at in a hurry — are 44px.
+• Inputs and sidebar rows are 40px; icon buttons 36px.
+• Sidebar rows have more breathing room, with clearer hover and active states.
+
+CARDS AND HOVER
+• Clickable cards lift slightly and deepen their shadow on hover, so what can
+  be clicked is obvious before you click it.
+• One thin scrollbar style across the app, with its own dark variant.
+
+Backend untouched: 226 audit checks and 34 unit tests still pass. Both static
+frontend checks — missing imports and unknown props — report clean.
+
+v1.17.0 (27 July 2026) — Motion (design system pass 2)
+--------------------------------------------------------
+Movement added where it tells you something, and nowhere else. Only opacity
+and transform are animated, so a long table still scrolls smoothly on a cheap
+till PC, and every effect collapses to nothing if the machine is set to
+reduce motion.
+
+TWO MORE CRASHES FOUND AND FIXED
+• The Items list used its loading skeleton without importing it — the list
+  would have thrown while loading. This was pre-existing.
+• The Dashboard would have thrown once its figures were animated, because it
+  does not import from the shared component file at all.
+Both were caught by a new check that scans every page for components used but
+never imported, which now reports clean.
+
+WHAT MOVES NOW
+• Headline figures count up to their value and land exactly on it — a money
+  total never stops a shilling short from rounding.
+• Table rows arrive in quick succession rather than all at once, so data reads
+  as landing rather than the page blinking. Capped so long tables have no slow
+  tail, and skipped entirely for skeleton rows.
+• Rows the system changed on your behalf glow briefly, so automatic updates
+  are visible instead of silent.
+• Modals scale in with a slight overshoot, drawers slide, popovers open from
+  the corner they belong to, and backdrops blur in.
+• Summary chips lift on hover; the sidebar's active marker grows into place
+  instead of jumping.
+• Buttons press in slightly. A new action button carries its own state —
+  spinner while working, a tick that draws itself when done — so confirmation
+  appears where you are already looking.
+• Refused input shakes as well as turning red, since colour alone is easy to
+  miss and no use to a colour-blind user.
+• Empty states ease in so they read as information rather than an error.
+• Charts draw themselves in; bars grow from their baseline in sequence.
+• Progress bars for longer jobs, determinate or indeterminate.
+
+Backend untouched: 226 audit checks and 34 unit tests still pass.
+
+v1.16.0 (27 July 2026) — Interface overhaul (design system pass 1)
+--------------------------------------------------------------------
+A design-system layer rather than a page-by-page repaint, so every screen in
+the app picks the changes up at once.
+
+THREE REAL BUGS FOUND AND FIXED
+• The row (⋮) menu on Recurring, Installments, Manufacturing, Offers, Loyalty
+  and Warranty would crash when opened — those pages passed their actions
+  under a different name than the component expected. The menu component now
+  accepts either, so all six work.
+• Empty states on those same pages were dropping their explanatory line for
+  the same reason, and three empty states on the Dashboard were rendering with
+  no text at all. Both fixed.
+• Confirmation dialogs were showing their heading and buttons but silently
+  dropping the sentence explaining what was about to happen.
+
+LOOK AND FEEL
+• Softer, layered shadows. Tinted near-black at low opacity with a tighter
+  blur reads far gentler than pure black at high opacity.
+• One focus ring across every control, shown for keyboard users only.
+• Nothing clickable is smaller than 36px now, so buttons are easier to hit —
+  on a touchscreen till especially.
+• A radius scale so nested corners stay concentric instead of drifting.
+• Motion is short and eased, and respects the "reduce motion" setting.
+
+NAVIGATION
+• The sidebar's one long list of fifteen items is now five short groups —
+  Sell, Stock, Money, Grow, Insights — separated by dividers, with the active
+  item marked by a bar rather than colour alone.
+
+TABLES
+• Headers stay put while you scroll a long list.
+• Numbers are right-aligned with matched digit widths so columns can be
+  scanned down.
+• Statuses render as coloured chips, and every screen now agrees on what each
+  colour means.
+• Retired and switched-off rows are dimmed so live data stands out.
+• Row (⋮) menus appear on hover or keyboard focus instead of sitting there
+  permanently — and stay visible on touch devices, where there is no hover.
+
+THINGS YOU COULD NOT SEE BEFORE
+• Tooltips on icon-only controls.
+• Loading skeletons shaped like the content they stand in for, with numeric
+  columns skeletoned as right-aligned figures.
+• Proper empty and error states with an icon, a heading and a way forward.
+• Copy-on-hover for cell values.
+
+DATE RANGES
+• Reports now use a proper range picker: Today, Last 7 days, Last 30 days,
+  This month, Last month and This year one click away, with a two-ended
+  calendar when a specific span is genuinely needed.
+
+Backend untouched: 226 audit checks and 34 unit tests all still pass.
+
+v1.15.0 (26 July 2026) — Warranty cover & claims
+--------------------------------------------------
+The last of the new modules. Switch on "Warranty cover & claims" in
+Settings → Modules, then set a warranty period in months on any item.
+
+• Selling a covered item registers the cover by itself — tied to the customer,
+  the invoice and the date, running for the item's own period. Cover is
+  created inside the sale's transaction, so a refused invoice never leaves
+  cover behind.
+• Serialised items get one record per unit, so an individual radio or phone
+  can be traced rather than a whole line of them.
+• Serial lookup sits at the top of the screen, because that is how this
+  actually gets used: a customer walks in holding the thing and you need to
+  know in seconds whether it is still covered, and until when.
+• Cover shows as in cover, ending soon (within a month), expired or void, so
+  a unit about to run out is visible before the customer finds out the hard
+  way.
+• Claims record the fault, and close as repaired, replaced, refunded or
+  rejected with what settling them cost. A claim outside the cover period is
+  refused and the message says when cover ran out, rather than quietly
+  accepting a promise the shop cannot keep.
+• Cover can be voided with a reason, and the record stays so the history is
+  still explainable. Nothing can be claimed against voided cover.
+• Cover for goods sold before the module was switched on can be registered by
+  hand.
+
+Cover periods handle short months properly: something sold on 31 January with
+one month of cover runs to 28 February (29th in a leap year).
+
+The audit suite now runs 226 checks with none failing.
+
+v1.14.0 (26 July 2026) — Loyalty points
+-----------------------------------------
+Switch on "Client loyalty points" in Settings → Modules for a Loyalty page,
+and set the scheme up under Settings → Loyalty.
+
+• Customers earn points automatically when a sale is billed to them — one
+  point per however many shillings you choose. Walk-in "Cash Sale" business
+  earns nothing, since there is nobody to credit.
+• Points are awarded inside the sale's own transaction, so an invoice that
+  fails can never leave points behind.
+• Every movement is a row in a ledger — earned, redeemed, corrected, expired —
+  and a balance is simply their sum. Nothing caches a running total, so a
+  balance can always be explained by the movements behind it, right back to
+  the sale that caused it.
+• Redeeming gives you the shilling value to take off the bill as an ordinary
+  discount, so the money side stays in the invoice where the books can see it.
+  A minimum redemption keeps small balances from being fiddly.
+• Corrections need a reason, and the reason stays in the customer's history.
+• Points can be set to lapse after a number of months. The expiry sweep treats
+  older points as spent first, so a customer who keeps earning and redeeming
+  never loses points they have effectively already used.
+• The members list shows what the scheme owes customers in shillings — useful
+  to know before running a promotion on top of it.
+
+The audit suite now runs 207 checks with none failing.
+
+v1.13.0 (26 July 2026) — Offers & promotions
+----------------------------------------------
+Switch on "Offers & promotions" in Settings → Modules for an Offers page.
+
+• Three kinds of deal: a percentage off, a fixed amount off each unit, or buy
+  X get Y free. Each can point at one item, a whole category, any item, or the
+  whole bill.
+• Conditions: a minimum quantity, a minimum amount, and a date range — so a
+  festive-season deal switches itself on and off.
+• Offers become an ordinary line discount at billing rather than a separate
+  kind of money off, so tax, posting, margin and every report keep working
+  exactly as before. There is no second discount system to fall out of step.
+• When two item offers could apply to the same line, only the better one is
+  used — promotions never quietly stack into a loss. A whole-bill offer then
+  applies to what is left after the item deals.
+• "Apply offers" on the invoice screen fills the discounts your running
+  promotions give, and the cashier can still override any of them.
+• "Test a basket" lets you try a pretend basket against the live rules before
+  a deal goes anywhere near a customer.
+• Deleting an offer never changes bills already raised.
+
+The audit suite now runs 194 checks with none failing.
+
+v1.12.0 (26 July 2026) — Manufacturing
+----------------------------------------
+Switch on "Manufacturing" in Settings → Modules for recipes and production runs.
+
+• A recipe (bill of materials) says what goes into one batch: the components
+  and their quantities, how many finished units a batch yields, and the labour
+  and overhead a batch costs. Recipes can be retired and put back in use.
+• Before producing, the costing panel shows exactly what the run will consume,
+  what each component is worth, what the batch costs in total, and what each
+  finished unit will therefore cost. No surprises after the fact.
+• Producing takes the components off the shelf and puts the finished goods on
+  it carrying their real cost — so the margin on what you make is as honest as
+  the margin on what you buy.
+• Short of stock, production is refused and the message names exactly what is
+  missing and by how much, rather than driving stock negative.
+• Every run keeps a record of what it ate and at what cost, so a finished
+  item's price can always be explained months later.
+• Components turning into product is value moving within inventory, so it
+  needs no journal entry. Labour and overhead are money genuinely spent, and
+  those do raise the value of what is now on the shelf — the books balance
+  either way.
+• Sensible refusals: a recipe cannot contain the item it produces, the same
+  component cannot be listed twice, and a recipe already used in production is
+  retired rather than deleted so past runs still make sense.
+
+The audit suite now runs 179 checks with none failing.
+
+v1.11.0 (26 July 2026) — Installments, and a schedule-drift fix
+-----------------------------------------------------------------
+Switch on "Installments management" in Settings → Modules for an Installments
+page that turns a credit invoice into an agreed payment timetable.
+
+• Pick an unpaid credit invoice, set an optional down payment, choose how many
+  instalments and how often, and see the exact timetable before you commit.
+  Any rounding lands on the last instalment, so the plan adds up to the
+  invoice to the shilling.
+• The plan is a promise, not a second set of books. Whether an instalment is
+  settled is worked out from the invoice's own payments, oldest first — so
+  recording a payment the ordinary way moves the plan on by itself. A plan can
+  never disagree with the accounts, because it never keeps its own copy.
+• Tabs for Active, In arrears, Due & overdue, and Finished, with a summary of
+  what is still to collect, how much is behind, and how many customers are
+  behind. The Due & overdue list shows the customer's phone number, ready for
+  chasing.
+• Cancelling or deleting a plan never touches the invoice or its payments —
+  the customer simply owes the balance without a timetable.
+
+SCHEDULE-DRIFT FIX (also affects recurring documents from v1.10.0)
+• A monthly schedule agreed on the 31st used to clamp to 28 February and then
+  stay on the 28th for good, quietly walking away from the agreed date.
+  It now treats a short month as an exception: 31 Jan → 28 Feb → 31 Mar →
+  30 Apr → 31 May. The v1.10.0 notes described this behaviour, but the code
+  did not do it; both recurring documents and installments do now.
+
+The audit suite covers all of it — 163 checks, none failing.
+
+v1.10.0 (26 July 2026) — Recurring sales & purchases, for real
+----------------------------------------------------------------
+The first of the new modules stops being a switch and starts doing work.
+Switch on "Recurring sales" and/or "Recurring purchases" in Settings → Modules
+and a Recurring page appears in the sidebar.
+
+• A schedule is a saved set of items plus a repeat rule: every N days, weeks,
+  months or years, starting on a date you choose, ending never / after a set
+  number of documents / on a date.
+• Run one schedule from its ⋯ menu, or "Run N due" to clear everything at once.
+• Documents are created through the very same engine as hand-keyed ones, so
+  tax rules, stock movements, costing and the GL are identical. Anything the
+  system would normally refuse — credit limit, below cost, out of stock, an
+  inactive item — is refused here too, recorded against the schedule with the
+  reason, and the run stops there so you can fix it rather than silently
+  skipping a month.
+• A back-dated schedule catches up properly: one document per missed period,
+  not a single lumped one, so the books match what was actually agreed.
+• Month-ends behave. A schedule started on the 31st fires on the 28th in
+  February (29th in a leap year) and returns to the 31st afterwards, instead
+  of drifting or skipping the month.
+• Pause and resume without losing the schedule or its history. Resuming an old
+  schedule picks up from today rather than firing every missed period at once.
+• Each schedule keeps a full history: which document each run produced, or the
+  exact reason it could not.
+• Deleting a schedule never touches documents it already created.
+
+Under the hood: the sale and purchase creation handlers are now shared with the
+recurring runner rather than duplicated, so the two can never drift apart.
+The audit suite covers all of this — 147 checks, none failing.
+
+v1.9.0 (26 July 2026) — Zoho Books batch C: modules & the Custom Invoice Builder
+---------------------------------------------------------------------------------
+• New Settings → Modules page. Account information (You sell / Invoicing method
+  / Client type) plus switches for every part of the system: Sales, Point of
+  Sale, Sales targets & commissions, Installments management, Offers &
+  promotions, Insurance, Client loyalty points, Recurring sales, Inventory,
+  Manufacturing, Purchase cycle, Recurring purchases, Accounting, Expenses,
+  Shifts and Stock takes.
+  Switching a module off hides its screen from the sidebar immediately; the
+  data it owns is left untouched, so switching it back on loses nothing.
+  The six brand-new modules ship switched off — they are placeholders for now
+  and the screens behind them arrive in a later release.
+• Custom Invoice Builder (Settings → Print → Custom Invoice Builder).
+  Twelve sections down the left — Template Details, Title, Logo, Business info,
+  Client info, Item Columns, Custom Fields, Labels, Header, Footer, Style and
+  Notes — an editor in the middle, and a live preview on the right.
+  Click any placeholder to drop it in at the cursor: business and client
+  details, invoice numbers and dates, totals, sales rep and more.
+  Choose which item columns print, rename any label on the page (handy for
+  another language), and set the accent colour, font size, grid lines and
+  table header fill.
+  The preview is rendered by the same code that prints the real invoice, so
+  what you design is exactly what comes out of the printer.
+  A line whose placeholders are all empty is dropped rather than printed, so a
+  customer with no TIN doesn't get a stranded "TIN" label on their invoice.
+• Audit suite repaired: it had been failing every sale and purchase since the
+  sales-rep requirement landed, which masked most of its coverage. It now runs
+  133 checks with none failing (it was reaching only 28 before).
+
+v1.8.0 (26 July 2026) — Zoho Books batch B: payments, imports & the AR/AP book
+-------------------------------------------------------------------------------
+• Payments now open full screen, with the fields a real settlement needs:
+  amount received, bank charges, "tax deducted?" (withholding), payment date,
+  payment mode, date received, Deposit To / Paid From account, reference and
+  notes — plus a live footer showing what the payment actually settles.
+• Withholding tax is handled properly: it still settles the invoice, but it
+  never reaches the bank. On money in it lands in Tax Recoverable as a URA
+  credit; on money out it lands in Taxes Payable as tax you owe. Bank charges
+  post to Indirect Expenses, so the amount banked is amount − charges.
+• Save as Draft parks a payment without allocating or posting anything.
+  Confirm it later from the payments list (⋯ → Confirm draft) and it allocates
+  oldest-first and writes the GL entry then.
+• Item import is now a 3-step wizard — Configure → Map Fields → Preview.
+  Drag and drop or choose a file, pick Skip Duplicates or Overwrite Items,
+  check the auto-detected column mapping, preview the first ten rows, then
+  import. Item Code / SKU can now be imported and is used to match duplicates.
+  A sample CSV is downloadable from step 1.
+• Twelve new reports in two new groups:
+    Receivables — AR Aging Summary, AR Aging Details, Invoice Details,
+                  Quote Details, Customer Balance Summary,
+                  Receivable Summary, Receivable Details
+    Payables    — AP Aging Summary, AP Aging Details,
+                  Supplier Balance Summary, Payable Summary, Payable Details
+  Aging buckets are Current / 1-15 / 16-30 / 31-60 / 61-90 / Over 90 days, and
+  these reports take a single "As of" date instead of a range.
+
+v1.7.0 (26 July 2026) — Zoho Books batch A: cleaner forms, items menu & preferences
+-----------------------------------------------------------------------------------
+• Invoice & purchase forms redesigned around a Zoho-style "Item Table" card:
+  bordered grid with Item details / Quantity / Unit / Rate / Discount % / Amount,
+  "+ Add New Row" and "+ Add Items in Bulk" buttons, Customer Notes on the left
+  and a boxed totals panel (Sub Total → Total) on the right.
+• Add Items in Bulk — tick many items in one searchable list, set quantities,
+  and drop them all onto the document at once (sales, purchases & debit notes).
+• Items screen toolbar reworked: blue ＋ (new item) plus a ⋯ menu with
+  Sort by ▸ (name / price / stock), Import ▸, Export ▸ (CSV / print list),
+  Preferences, Price tags, Refresh List and Reset Column Width.
+• Items → Preferences (Zoho layout): quantity decimal places, default
+  inventory valuation method, allow duplicate item names, enhanced item
+  search (keywords in any order), enable/disable price lists, and whether
+  new products track inventory by default. Also editable in Settings → Item.
+• Duplicate item names are now blocked unless the preference allows them —
+  and creating items is safe either way (new-item id no longer looked up by name).
+• Quantity inputs follow your decimal-places preference.
+
+v1.2.0 (July 2026)
+------------------
+POS
+- Dark Aronium-style till: square action tiles, big green SAVE & PRINT, red Void
+- Totals bar under the item list with white tax lines and large grey total
+- Payment tiles on top; customer picker appears only for Credit sales
+- Icon search modes (all / name / code / barcode) with large, obvious suggestions
+- Bigger text throughout for easy reading at the counter
+- Full-height side menu (vector icons): Cash in/out, Credit payments, X report, End of day
+
+End of day (like Aronium)
+- Cash out / Cash out all users / Close register options with big totals preview
+- X and Z reports cover everything SINCE THE LAST CLOSE (document ranges shown)
+- Slips print in receipt format: Report #, From/To document, user sales with
+  tender breakdown, tender types, discounts, taxable/tax/total
+- Close register asks "Print closing reports" (Items report + Z report toggles)
+- History tab stores every close for balancing any previous date, with reprint
+
+Items
+- Slide-in editor tabs: Details (barcodes, fixed price, default quantity, active
+  switches), Price & tax (cost <-> markup <-> price), Stock control, Image & color
+- Toolbar: Refresh, New, Export, Import, Print list, Price tags
+- Price-tags designer: A4 or thermal roll, columns, show/hide name-price-SKU-
+  barcode-borders, size sliders, live preview (settings remembered)
+- Three-dot menu on every transaction: preview/print, reverse adjustment
+
+Reports — 35 total
+- Full Aronium catalog: daily/hourly sales, item list, categories, customers,
+  cashiers, profit & margin, discounts, refunds, voids, invoice & bill lists,
+  purchases by product/supplier, unpaid with ageing, payment types (+ by user,
+  + by customer), drawer entries, stock movement, reorder list, loss & damage
+- Reports page shows "35 reports · build v1.2.0" so you can confirm updates took
+
+Also
+- Cash in / out full page with quick reason chips (posts to the real books)
+- Credit payments screen: see every debtor, receive money, oldest bills cleared first
+- Online store page (/store) with WhatsApp ordering — enable in Settings
+- Multi-device on the same Wi-Fi (address shown on start and in Settings > About)
+- update.bat replaces the app safely and keeps all your data
+
+Install/update: run update.bat next to start.bat and choose the new zip.
+Login: admin / admin123 (change it in Users).

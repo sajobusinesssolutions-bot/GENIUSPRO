@@ -172,4 +172,3 @@ and read by nothing.
 ---
 
 SALJO TECH · v1.42.0
-"# GeniusPOS" 

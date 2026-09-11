@@ -14,3 +14,6 @@ e2e/screenshots/
 
 # Session zips are built from the tree, not stored in it.
 *.zip
+
+# Windows installers and packaged desktop binaries are release artifacts.
+*.exe
